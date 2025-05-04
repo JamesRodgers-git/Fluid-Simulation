@@ -1,0 +1,41 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            // I'm using VS Code and this allows me to build&run for debug using Command+Shift+B (OS X)
+            // I can even run multiple windows with slight code variations.  That's cool!
+            // If there is an error, it will keep the terminal in VS Code open after closing the app.
+
+            "label": "run debug",
+            "type": "shell",
+            "command": "zig build run",
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "runOptions": {
+                "instanceLimit": 3
+            },
+            "presentation": {
+                "reveal": "always",
+                "focus": false,
+                "panel": "new",
+                "clear": false,
+                "close": true
+            },
+        },
+        // {
+        //     "label": "run release",
+        //     "type": "shell",
+        //     "command": "zig build --release=small",
+        //     "problemMatcher": [],
+        //     "group": {
+        //         "kind": "build",
+        //         "isDefault": false
+        //     }
+        // }
+    ]
+}
