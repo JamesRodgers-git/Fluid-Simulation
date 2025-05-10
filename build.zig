@@ -3,46 +3,75 @@ const std = @import("std");
 // const shdc = @import("shdc");
 
 /// Command to run debug
-// zig build run
+//~ zig build run
 //
-/// Command to run optimized release
-// zig build --release=fast run
+/// Command to run optimized build
+//~ zig build --release=fast run
 //
-/// This is for running in web browser. It also launches local web server:
-// http://localhost:6931/fluid.html
-// zig build -Dtarget=wasm32-emscripten run
-// zig build --release=fast -Dtarget=wasm32-emscripten run
+/// You can add --watch to always build on code changes. Very convenient btw.
+//
+/// This is for building web version
+//~ zig build -Dtarget=wasm32-freestanding -p web --watch
+/// Then run local server and open in web browser http://localhost:1369/
+//~ python3 -m http.server 1369 --directory web
 // 
 /// Just left over for the future
-// --release=small --release=safe  wasm32-freestanding wasm32-wasi
+// --release=small --release=safe  wasm32-freestanding wasm32-wasi wasm32-emscripten
+// --verbose
+
+fn addImports (b: *std.Build, module: *std.Build.Module) void
+{
+    const app = b.createModule(.{ .root_source_file = b.path("src/application.zig") });
+    const debug = b.createModule(.{ .root_source_file = b.path("src/debug.zig") });
+        debug.addImport("app", app);
+
+    module.addImport("app", app);
+    module.addImport("debug", debug);
+
+    // module.addAnonymousImport("utils", "src/utils.zig");
+}
 
 pub fn build (b: *std.Build) !void
 {
-    // if (b.option(bool, "onefile", "Generate single-file bundle and exit") orelse false)
-    // {
-    //     std.debug.print("Hey", .{});
-    //     return;
-    // }
-
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const main_exe = b.addExecutable(.{
-        .name = "fluid",
-        .target = target,
-        .optimize = optimize,
-        .root_source_file = b.path("src/main.zig"),
-        // .root_module = exe_mod,
-        // .single_threaded = true,
-        // .strip = true,
-        // .omit_frame_pointer = false,
-        // .unwind_tables = .none,
-        // .error_tracing = false
-    });
+    //const target = b.resolveTargetQuery(.{ .os_tag = .macos });
+    //const target = b.resolveTargetQuery(.{ .os_tag = .windows });
+    //const target = b.resolveTargetQuery(.{ .os_tag = .linux });
 
-    if (target.result.os.tag == .macos)
+    if (target.result.cpu.arch.isWasm())
+    {
+        const exe = b.addExecutable(.{
+            .name = "fluid",
+            .target = target,
+            .optimize = .ReleaseSmall, // .Debug .ReleaseFast
+            .root_source_file = b.path("src/main.zig"),
+        });
+        exe.entry = .disabled;
+        exe.rdynamic = true;
+
+        // exe.root_module.export_symbol_names
+
+        addImports(b, exe.root_module);
+        b.installArtifact(exe);
+    }
+    else if (target.result.os.tag == .macos)
     {
         try std.fs.cwd().makePath("zig-out/lib/");
+
+        const exe = b.addExecutable(.{
+            .name = "fluid",
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = b.path("src/main.zig"),
+            // .root_module = exe_mod,
+            // .single_threaded = true,
+            // .strip = true,
+            // .omit_frame_pointer = false,
+            // .unwind_tables = .none,
+            // .error_tracing = false
+        });
 
         const cmd_objc = b.addSystemCommand(&.{
             // "swiftc",
@@ -65,15 +94,15 @@ pub fn build (b: *std.Build) !void
         cmd_objc.addCheck(.{ .expect_term = .{ .Exited = 0 } });
         cmd_objc.has_side_effects = true;
 
-        main_exe.step.dependOn(&cmd_objc.step);
+        exe.step.dependOn(&cmd_objc.step);
 
         // main_exe.linkLibC();
         // main_exe.linkLibCpp();
         // main_exe.linkFramework("Foundation");
-        main_exe.linkFramework("Cocoa");
-        main_exe.linkFramework("Metal");
-        main_exe.linkFramework("QuartzCore");
-        main_exe.addObjectFile(b.path("zig-out/lib/cocoa_osx.o"));
+        exe.linkFramework("Cocoa");
+        exe.linkFramework("Metal");
+        exe.linkFramework("QuartzCore");
+        exe.addObjectFile(b.path("zig-out/lib/cocoa_osx.o"));
 
         // main_exe.addLibraryPath(std.Build.LazyPath {
         //     .cwd_relative = "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx",
@@ -86,13 +115,16 @@ pub fn build (b: *std.Build) !void
         
         // main_exe.addFrameworkPath(b.path("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"));
         // main_exe.addIncludePath(lazy_path: LazyPath)
+
+        addImports(b, exe.root_module);
+        b.installArtifact(exe);
+
+        const run = b.addRunArtifact(exe);
+        run.step.dependOn(b.getInstallStep());
+        b.step("run", "Run the app").dependOn(&run.step);
     }
 
-    b.installArtifact(main_exe);
 
-    const run = b.addRunArtifact(main_exe);
-    run.step.dependOn(b.getInstallStep());
-    b.step("run", "Run the app").dependOn(&run.step);
 
     // const dep_sokol = b.dependency("sokol", .{
     //     .target = target,

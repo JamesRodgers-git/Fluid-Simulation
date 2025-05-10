@@ -1,6 +1,28 @@
 const std = @import("std");
 
+const app = @import("app");
+const debug = @import("debug");
 const native = @import("native/native.zig");
+
+// Platforms with no-entry like web does not call main
+pub fn main () void
+{
+    native.startApp();
+    // On mac code doesn't execute here after [app run] from obj-c
+}
+
+export fn init () void
+{
+    debug.log("Platform: {s}", .{ @tagName(app.platform) });
+
+    // build size grows quickly with every log
+    // debug.init();
+    debug.log("hi", .{});
+    debug.log("hii", .{});
+    debug.log("hiii", .{});
+    debug.log("hi {}", .{5});
+}
+
 
 // const sokol = @import("sokol");
 // const slog = sokol.log;
@@ -90,24 +112,3 @@ const native = @import("native/native.zig");
 // {
 //     sg.shutdown();
 // }
-
-
-pub fn main () void
-{
-    native.createWindow();
-
-    // app.createWindow();
-
-    // sapp.run(.{
-    //     .init_cb = init,
-    //     .frame_cb = frame,
-    //     .cleanup_cb = cleanup,
-    //     .width = 640,
-    //     .height = 480,
-    //     // .high_dpi = true,
-    //     .icon = .{ .sokol_default = true },
-    //     .window_title = "fluid simulation",
-    //     .logger = .{ .func = slog.func },
-    //     // .win32_console_attach = true,
-    // });
-}

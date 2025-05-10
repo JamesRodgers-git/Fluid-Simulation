@@ -19,11 +19,11 @@ static void enableMetalValidation (void)
 }
 
 // static makes it accessible only inside this file
-static NSWindow* _Window;
-static CAMetalLayer* _MetalLayer;
+static NSWindow *_Window;
+static CAMetalLayer *_MetalLayer;
 static id<MTLDevice> _MetalDevice;
 static id<MTLCommandQueue> _MetalCommandQueue;
-static CAMetalDisplayLink* _MetalDisplayLink; // minimum iOS 17, better use CADisplayLink and CVDisplayLink
+static CAMetalDisplayLink *_MetalDisplayLink; // minimum iOS 17, better use CADisplayLink and CVDisplayLink
 
 @interface MetalDisplayLinkDelegate : NSObject <CAMetalDisplayLinkDelegate> @end
 @implementation MetalDisplayLinkDelegate
@@ -33,30 +33,36 @@ static CAMetalDisplayLink* _MetalDisplayLink; // minimum iOS 17, better use CADi
     {
         // NSLog(@"x %f", _MetalLayer.contentsScale);
 
-        // NSLog(@"%d", update.drawable == nil);
+        // NSLog(@"%d", update.drawable != nil);
         // update.drawable
 
-        id<CAMetalDrawable> drawable = update.drawable;//[_MetalLayer nextDrawable]; // wtf nextDrawable returns nil
-        if (!drawable) return;
+        @autoreleasepool
+        {
+            // id<CAMetalDrawable> drawable = update.drawable;
+            id<CAMetalDrawable> drawable = [_MetalLayer nextDrawable]; // wtf nextDrawable returns nil
+            if (!drawable) return;
 
-        // NSLog(@"x %f", _MetalLayer.drawableSize.width);
+            // NSLog(@"%d", [_MetalLayer nextDrawable] != nil);
+            // NSLog(@"x %f", _MetalLayer.drawableSize.width);
 
-        MTLRenderPassDescriptor* renderPassDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
-        renderPassDescriptor.colorAttachments[0].loadAction = MTLLoadActionClear; // MTLLoadActionDontCare
-        renderPassDescriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
-        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColorMake(1.0, 0.0, 0.0, 1.0);
-        renderPassDescriptor.colorAttachments[0].texture = drawable.texture;
+            MTLRenderPassDescriptor *pass = [MTLRenderPassDescriptor renderPassDescriptor];
+            pass.colorAttachments[0].loadAction = MTLLoadActionClear; // MTLLoadActionDontCare
+            pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+            pass.colorAttachments[0].clearColor = MTLClearColorMake(1.0, 0.0, 0.0, 1.0);
+            pass.colorAttachments[0].texture = drawable.texture;
 
-        // id<MTLCommandQueue> commandQueue = [_MetalLayer.device newCommandQueue];
-        id<MTLCommandBuffer> commandBuffer = [_MetalCommandQueue commandBuffer];
+            // id<MTLCommandQueue> commandQueue = [_MetalLayer.device newCommandQueue];
+            id<MTLCommandBuffer> buffer = [_MetalCommandQueue commandBuffer];
 
-        id<MTLRenderCommandEncoder> renderEncoder = [commandBuffer renderCommandEncoderWithDescriptor:renderPassDescriptor];
-        [renderEncoder endEncoding];
+            id<MTLRenderCommandEncoder> encoder = [buffer renderCommandEncoderWithDescriptor:pass];
+            [encoder endEncoding];
 
-        [commandBuffer presentDrawable:drawable];
-        [commandBuffer commit];
+            [buffer presentDrawable:drawable];
+            [buffer commit];
 
-        // [drawable present];
+            // buffer.waitUntilScheduled
+            // [drawable present];
+        }
     }
 
 @end
@@ -81,12 +87,23 @@ static CAMetalDisplayLink* _MetalDisplayLink; // minimum iOS 17, better use CADi
 
         _Window.contentView.wantsLayer = YES;
         _Window.contentView.layer = _MetalLayer;
+
+        // TODO check this
+        // _Window.contentView.layerContentsRedrawPolicy
+        // _Window.contentView.needsDisplay
         // _Window.contentView.makeBackingLayer
+        // _Window.contentView.
+
         // _MetalLayer.frame = _Window.contentView.bounds;
         _MetalLayer.drawableSize = CGSizeMake(690 * _Window.backingScaleFactor, 690 * _Window.backingScaleFactor);
-        _MetalLayer.contentsScale = _Window.backingScaleFactor; // Check if 2 that it renders twice
-        // NSLog(@"x %f", _MetalLayer.frame.size.width);
-        // _Window.contentView.layerContentsRedrawPolicy
+        _MetalLayer.contentsScale = _Window.backingScaleFactor;
+
+        // TODO play with these values
+        // _MetalLayer.maximumDrawableCount = 2;
+        // _MetalLayer.allowsNextDrawableTimeout = false;
+        // _MetalLayer.presentsWithTransaction = true;
+        // _MetalLayer.displaySyncEnabled = false;
+        // _MetalLayer.maximumDrawableCount = 2;
 
         _MetalDisplayLink = [[CAMetalDisplayLink alloc] initWithMetalLayer:_MetalLayer];
         // _MetalDisplayLink.preferredFrameRateRange = 
@@ -129,7 +146,7 @@ extern "C"
 
         @autoreleasepool
         {
-            NSApplication* app = [NSApplication sharedApplication];
+            NSApplication *app = [NSApplication sharedApplication];
             [app setActivationPolicy:NSApplicationActivationPolicyRegular];
             [app setDelegate:[[AppDelegate alloc] init]];
 

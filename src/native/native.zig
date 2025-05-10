@@ -1,14 +1,14 @@
 const std = @import("std");
-const builtin = @import("builtin");
+const app = @import("app");
 
 extern fn init_and_open_window_osx () void;
-// extern fn create_window_osxc () void;
 
-pub fn createWindow () void
+//  init_cb: ?*const fn () callconv(.C) void = null,
+pub fn startApp () void
 {
-    switch (comptime builtin.os.tag)
+    switch (comptime app.platform)
     {
-        .macos => init_and_open_window_osx(),
-        else   => @compileLog("Unsupported OS"),
+        .mac => init_and_open_window_osx(),
+        else   => {},
     }
 }
