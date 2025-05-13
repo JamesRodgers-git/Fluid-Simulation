@@ -4,28 +4,31 @@ const std = @import("std");
 
 /// Command to run debug
 //~ zig build run
-//
+
 /// Command to run optimized build
 //~ zig build --release=fast run
-//
+
 /// You can add --watch to always build on code changes. Very convenient btw.
-//
+
 /// This is for building web version
-//~ zig build -Dtarget=wasm32-freestanding -p web --watch
+//~ zig build -Dtarget=wasm32-freestanding -p projects/web --watch
 /// Then run local server and open in web browser http://localhost:1369/
-//~ python3 -m http.server 1369 --directory web
-// 
+//~ python3 -m http.server 1369 --directory projects/web
+
 /// Just left over for the future
 // --release=small --release=safe  wasm32-freestanding wasm32-wasi wasm32-emscripten
 // --verbose
 
 fn addImports (b: *std.Build, module: *std.Build.Module) void
 {
-    const app = b.createModule(.{ .root_source_file = b.path("src/application.zig") });
-    const debug = b.createModule(.{ .root_source_file = b.path("src/debug.zig") });
+    const app = b.createModule(.{ .root_source_file = b.path("src/engine/application.zig") });
+    const native = b.createModule(.{ .root_source_file = b.path("src/engine/native.zig") });
+        native.addImport("app", app);
+    const debug = b.createModule(.{ .root_source_file = b.path("src/engine/debug.zig") });
         debug.addImport("app", app);
 
     module.addImport("app", app);
+    module.addImport("native", native);
     module.addImport("debug", debug);
 
     // module.addAnonymousImport("utils", "src/utils.zig");
@@ -46,7 +49,7 @@ pub fn build (b: *std.Build) !void
             .name = "fluid",
             .target = target,
             .optimize = .ReleaseSmall, // .Debug .ReleaseFast
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("src/fluid/main.zig"),
         });
         exe.entry = .disabled;
         exe.rdynamic = true;
@@ -64,7 +67,7 @@ pub fn build (b: *std.Build) !void
             .name = "fluid",
             .target = target,
             .optimize = optimize,
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("src/fluid/main.zig"),
             // .root_module = exe_mod,
             // .single_threaded = true,
             // .strip = true,
@@ -85,7 +88,7 @@ pub fn build (b: *std.Build) !void
 
             "clang",
             // "-O3",
-            "-c", "src/native/cocoa_osx.mm",
+            "-c", "src/engine/darwin/cocoa_osx.mm",
             "-o", "zig-out/lib/cocoa_osx.o",
             // "-framework", "Cocoa",
         });

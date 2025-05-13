@@ -90,6 +90,19 @@ void initMetal ()
 
     // NSLog(@"%@",_Window.deviceDescription);
     // NSLog(@"%f", _MetalLayer.maximumDrawableCount);
+
+    // // figuring out pipeline
+    // NSError *errors;
+    // id <MTLLibrary> library = [_MetalDevice newLibraryWithSource:progSrc options:nil error:&errors];
+    // id <MTLFunction> vertFunc = [library newFunctionWithName:@"hello_vertex"];
+    // id <MTLFunction> fragFunc = [library newFunctionWithName:@"hello_fragment"];
+
+    // MTLRenderPipelineDescriptor *renderPipelineDesc = [[MTLRenderPipelineDescriptor alloc] init];
+    // renderPipelineDesc.vertexFunction = vertFunc;
+    // renderPipelineDesc.fragmentFunction = fragFunc;
+    // renderPipelineDesc.colorAttachments[0].pixelFormat = currentTexture.pixelFormat;
+
+    // id <MTLRenderPipelineState> pipeline = [_MetalDevice newRenderPipelineStateWithDescriptor:renderPipelineDesc error:&errors];
 }
 
 bool resizeMetal ()
@@ -112,7 +125,6 @@ bool resizeMetal ()
     return true;
 }
 
-// update gets called on screen's refresh rate
 void displayLinkUpdateLoop ()
 {
     bool needRedraw = false; // probably not needed
@@ -130,18 +142,19 @@ void displayLinkUpdateLoop ()
         // NSLog(@"%d", [_MetalLayer nextDrawable] != nil);
         // NSLog(@"x %f", _MetalLayer.drawableSize.width);
 
-        MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
-        pass.colorAttachments[0].loadAction = MTLLoadActionClear; // MTLLoadActionDontCare
-        pass.colorAttachments[0].storeAction = MTLStoreActionStore;
-        pass.colorAttachments[0].clearColor = MTLClearColorMake(1.0, 0.0, 0.0, 1.0);
-        pass.colorAttachments[0].texture = drawable.texture;
-
+        // 1 MTLCommandBuffer is enough for whole application
         id<MTLCommandBuffer> commandBuffer = [_MetalCommandQueue commandBuffer]; // commandBufferWithDescriptor, commandBufferWithUnretainedReferences
+
+            MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
+            pass.colorAttachments[0].loadAction = MTLLoadActionClear; // MTLLoadActionDontCare
+            pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+            pass.colorAttachments[0].clearColor = MTLClearColorMake(1.0, 0.0, 0.0, 1.0);
+            pass.colorAttachments[0].texture = drawable.texture;
             id<MTLRenderCommandEncoder> encoder = [commandBuffer renderCommandEncoderWithDescriptor:pass];
-
+                // [encoder setRenderPipelineState:(nonnull id<MTLRenderPipelineState>)]
                 // [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
-
             [encoder endEncoding];
+
         [commandBuffer presentDrawable:drawable];
         [commandBuffer commit];
 
@@ -227,7 +240,6 @@ static double _prevFrameTime;
 @end
 
 @implementation WindowDelegate
-
     - (BOOL) windowShouldClose:(NSWindow *)sender { return YES; }
 
     - (void) windowDidResize:(NSNotification *)notification
@@ -239,11 +251,9 @@ static double _prevFrameTime;
 
         // NSLog(@"%s", "windowDidResize");
     }
-
 @end
 
 @implementation AppDelegate
-
     - (BOOL) applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender { return YES; }
 
     - (void) applicationDidFinishLaunching:(NSNotification *)notification
@@ -253,5 +263,4 @@ static double _prevFrameTime;
         // TODO is it the perfect place to call it?
         [_Renderer startDisplayLink];
     }
-
 @end

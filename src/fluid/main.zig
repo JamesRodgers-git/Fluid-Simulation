@@ -1,8 +1,7 @@
 const std = @import("std");
-
 const app = @import("app");
 const debug = @import("debug");
-const native = @import("native/native.zig");
+const native = @import("native");
 
 // Platforms with no-entry like web do not call main
 pub fn main () void

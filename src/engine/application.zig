@@ -28,7 +28,15 @@ pub const RuntimePlatform = enum
     // }
 };
 
+pub const GraphicsAPI = enum
+{
+    undefined,
+    webgl2,
+    metal,
+};
+
 pub const platform = PickPlatform();
+pub const graphicsAPI = PickGraphicsAPI();
 
 fn PickPlatform () RuntimePlatform
 {
@@ -43,6 +51,26 @@ fn PickPlatform () RuntimePlatform
         .windows => return .windows,
         .linux => return .linux,
         .ios => return .ios,
+        else => {}
+        // .darwin => target.os.tag.isDarwin(),
+    }
+
+    return .undefined;
+}
+
+fn PickGraphicsAPI () GraphicsAPI
+{
+    if (builtin.target.cpu.arch.isWasm())
+        return .webgl2;
+    // if (builtin.target.abi.isAndroid())
+    //     return .android;
+
+    switch (builtin.target.os.tag)
+    {
+        .macos => return .metal,
+        // .windows => return .windows,
+        // .linux => return .linux,
+        // .ios => return .ios,
         else => {}
         // .darwin => target.os.tag.isDarwin(),
     }
