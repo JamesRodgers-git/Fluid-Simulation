@@ -4,13 +4,16 @@ const app = @import("app");
 const debug = @import("debug");
 const native = @import("native/native.zig");
 
-// Platforms with no-entry like web does not call main
+// Platforms with no-entry like web do not call main
 pub fn main () void
 {
     native.startApp();
     // On mac code doesn't execute here after [app run] from obj-c
 }
 
+// these parameters are not yet available in init call:
+// - view render size
+// -
 export fn init () void
 {
     debug.log("Platform: {s}", .{ @tagName(app.platform) });
@@ -21,6 +24,18 @@ export fn init () void
     debug.log("hii", .{});
     debug.log("hiii", .{});
     debug.log("hi {}", .{5});
+}
+
+// update and draw are synchronised at the same refresh rate but sometimes draw can be skipped
+
+export fn update () void
+{
+
+}
+
+export fn draw () void
+{
+
 }
 
 

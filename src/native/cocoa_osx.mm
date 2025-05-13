@@ -1,4 +1,6 @@
 #import <Cocoa/Cocoa.h>
+#include <CoreFoundation/CFDate.h>
+#include <objc/NSObject.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <Foundation/Foundation.h>
 #include <QuartzCore/QuartzCore.h>
@@ -18,135 +20,149 @@ static void enableMetalValidation (void)
     // setenv("METAL_DEVICE_WRAPPER_TYPE", "1", 1);
 }
 
-// static makes it accessible only inside this file
-static NSWindow *_Window;
-static CAMetalLayer *_MetalLayer;
-static id<MTLDevice> _MetalDevice;
-static id<MTLCommandQueue> _MetalCommandQueue;
-static CAMetalDisplayLink *_MetalDisplayLink; // minimum iOS 17, better use CADisplayLink and CVDisplayLink
+extern "C"
+{
+// functions that are called from obj-c side
+// they all implemented in main.zig
 
-@interface MetalDisplayLinkDelegate : NSObject <CAMetalDisplayLinkDelegate> @end
-@implementation MetalDisplayLinkDelegate
+    void init ();
+    void update ();
+    void draw ();
+}
 
-    // Apple wtf is this syntax
-    - (void) metalDisplayLink:(nonnull CAMetalDisplayLink *)link needsUpdate:(nonnull CAMetalDisplayLinkUpdate *)update
-    {
-        // NSLog(@"x %f", _MetalLayer.contentsScale);
+@interface Renderer : NSObject
+{
+    // TODO add CVDisplayLink to support mac os before 10.14
 
-        // NSLog(@"%d", update.drawable != nil);
-        // update.drawable
-
-        @autoreleasepool
-        {
-            // id<CAMetalDrawable> drawable = update.drawable;
-            id<CAMetalDrawable> drawable = [_MetalLayer nextDrawable]; // wtf nextDrawable returns nil
-            if (!drawable) return;
-
-            // NSLog(@"%d", [_MetalLayer nextDrawable] != nil);
-            // NSLog(@"x %f", _MetalLayer.drawableSize.width);
-
-            MTLRenderPassDescriptor *pass = [MTLRenderPassDescriptor renderPassDescriptor];
-            pass.colorAttachments[0].loadAction = MTLLoadActionClear; // MTLLoadActionDontCare
-            pass.colorAttachments[0].storeAction = MTLStoreActionStore;
-            pass.colorAttachments[0].clearColor = MTLClearColorMake(1.0, 0.0, 0.0, 1.0);
-            pass.colorAttachments[0].texture = drawable.texture;
-
-            // id<MTLCommandQueue> commandQueue = [_MetalLayer.device newCommandQueue];
-            id<MTLCommandBuffer> buffer = [_MetalCommandQueue commandBuffer];
-
-            id<MTLRenderCommandEncoder> encoder = [buffer renderCommandEncoderWithDescriptor:pass];
-            [encoder endEncoding];
-
-            [buffer presentDrawable:drawable];
-            [buffer commit];
-
-            // buffer.waitUntilScheduled
-            // [drawable present];
-        }
-    }
-
+    CADisplayLink *displayLink;
+    // NSWindow *_Window;
+}
+- (instancetype)init:(NSWindow *)window;
+- (void) startDisplayLink;
+// - (void)createDisplayLink:(NSWindow *)window;
 @end
 
 @interface AppDelegate : NSObject <NSApplicationDelegate> @end
-@implementation AppDelegate
+@interface WindowDelegate : NSObject <NSWindowDelegate> @end
 
-    - (BOOL) applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender { return YES; }
+// static makes it accessible only inside this file
+static CAMetalLayer* _MetalLayer;
+static id<MTLDevice> _MetalDevice;
+static id<MTLCommandQueue> _MetalCommandQueue;
+static id<MTLLibrary> _MetalLibrary;
+static Renderer* _Renderer;
 
-    - (void) applicationDidFinishLaunching:(NSNotification *)notification
+static NSWindow* _Window;
+static int _WindowWidth;
+static int _WindowHeight;
+
+void initMetal ()
+{
+    _MetalLayer = [CAMetalLayer layer];
+    _MetalDevice = MTLCreateSystemDefaultDevice();
+    _MetalCommandQueue = [_MetalDevice newCommandQueueWithMaxCommandBufferCount: 64];
+    _MetalLibrary = [_MetalDevice newDefaultLibrary];
+
+    _MetalLayer.device = _MetalDevice;
+    _MetalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm; // MTLPixelFormatBGRA8Unorm_sRGB; MTLPixelFormatRGBA16Float or MTLPixelFormatRGB10A2Unorm for HDR and wide gamut
+    _MetalLayer.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB); // nil, kCGColorSpaceGenericRGB
+    _MetalLayer.opaque = YES;
+    _MetalLayer.framebufferOnly = YES;
+    // kCGColorSpaceExtendedLinearSRGB or kCGColorSpaceExtendedSRGB for wide color; kCGColorSpaceDisplayP3, kCGColorSpaceExtendedLinearDisplayP3
+    // _MetalLayer.autoresizingMask
+
+    _Window.contentView.wantsLayer = YES;
+    _Window.contentView.layer = _MetalLayer;
+
+    // TODO play with it
+    // _Window.contentView.layerContentsRedrawPolicy
+    // _Window.contentView.needsDisplay
+    // _Window.contentView.makeBackingLayer
+    // _Window.contentView.
+
+    // TODO play with these values
+    // _MetalLayer.maximumDrawableCount = 2; // default is 3
+    // _MetalLayer.allowsNextDrawableTimeout = false;
+    // _MetalLayer.presentsWithTransaction = true;
+    // _MetalLayer.displaySyncEnabled = false;
+
+    _Renderer = [[Renderer alloc] init:_Window];
+
+    // NSLog(@"%@",_Window.deviceDescription);
+    // NSLog(@"%f", _MetalLayer.maximumDrawableCount);
+}
+
+bool resizeMetal ()
+{
+    CGSize frameSize = _Window.frame.size;
+
+    if ((int)frameSize.width == _WindowWidth && (int)frameSize.height == _WindowHeight)
+        return false;
+
+    _WindowWidth = frameSize.width;
+    _WindowHeight = frameSize.height;
+
+    float scale = _Window.backingScaleFactor; // _Window.screen.backingScaleFactor
+    // _MetalLayer.frame = _Window.contentView.bounds;
+    _MetalLayer.drawableSize = CGSizeMake(frameSize.width * scale, frameSize.height * scale);
+    _MetalLayer.contentsScale = _Window.backingScaleFactor;
+
+    // NSLog(@"%f", _MetalLayer.drawableSize.width);
+
+    return true;
+}
+
+// update gets called on screen's refresh rate
+void displayLinkUpdateLoop ()
+{
+    bool needRedraw = false; // probably not needed
+    if (resizeMetal())
+        needRedraw = true;
+
+    update();
+
+    @autoreleasepool // is this ok?
     {
-        _MetalLayer = [CAMetalLayer layer];
-        _MetalDevice = MTLCreateSystemDefaultDevice();
-        _MetalCommandQueue = [_MetalDevice newCommandQueueWithMaxCommandBufferCount: 64];
+        // nextDrawable may block execution, good idea is to make it non blocking for non rendering update
+        id<CAMetalDrawable> drawable = [_MetalLayer nextDrawable];
+        if (!drawable) return;
 
-        _MetalLayer.device = _MetalDevice;
-        _MetalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm; // MTLPixelFormatBGRA8Unorm_sRGB; MTLPixelFormatRGBA16Float or MTLPixelFormatRGB10A2Unorm for HDR and wide gamut
-        _MetalLayer.opaque = YES;
-        _MetalLayer.framebufferOnly = YES;
-        _MetalLayer.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB); // nil, kCGColorSpaceGenericRGB
-        // kCGColorSpaceExtendedLinearSRGB or kCGColorSpaceExtendedSRGB for wide color; kCGColorSpaceDisplayP3, kCGColorSpaceExtendedLinearDisplayP3
+        // NSLog(@"%d", [_MetalLayer nextDrawable] != nil);
+        // NSLog(@"x %f", _MetalLayer.drawableSize.width);
 
-        _Window.contentView.wantsLayer = YES;
-        _Window.contentView.layer = _MetalLayer;
+        MTLRenderPassDescriptor* pass = [MTLRenderPassDescriptor renderPassDescriptor];
+        pass.colorAttachments[0].loadAction = MTLLoadActionClear; // MTLLoadActionDontCare
+        pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+        pass.colorAttachments[0].clearColor = MTLClearColorMake(1.0, 0.0, 0.0, 1.0);
+        pass.colorAttachments[0].texture = drawable.texture;
 
-        // TODO check this
-        // _Window.contentView.layerContentsRedrawPolicy
-        // _Window.contentView.needsDisplay
-        // _Window.contentView.makeBackingLayer
-        // _Window.contentView.
+        id<MTLCommandBuffer> commandBuffer = [_MetalCommandQueue commandBuffer]; // commandBufferWithDescriptor, commandBufferWithUnretainedReferences
+            id<MTLRenderCommandEncoder> encoder = [commandBuffer renderCommandEncoderWithDescriptor:pass];
 
-        // _MetalLayer.frame = _Window.contentView.bounds;
-        _MetalLayer.drawableSize = CGSizeMake(690 * _Window.backingScaleFactor, 690 * _Window.backingScaleFactor);
-        _MetalLayer.contentsScale = _Window.backingScaleFactor;
+                // [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
 
-        // TODO play with these values
-        // _MetalLayer.maximumDrawableCount = 2;
-        // _MetalLayer.allowsNextDrawableTimeout = false;
-        // _MetalLayer.presentsWithTransaction = true;
-        // _MetalLayer.displaySyncEnabled = false;
-        // _MetalLayer.maximumDrawableCount = 2;
+            [encoder endEncoding];
+        [commandBuffer presentDrawable:drawable];
+        [commandBuffer commit];
 
-        _MetalDisplayLink = [[CAMetalDisplayLink alloc] initWithMetalLayer:_MetalLayer];
-        // _MetalDisplayLink.preferredFrameRateRange = 
-        [_MetalDisplayLink setDelegate:[[MetalDisplayLinkDelegate alloc] init]];
-        [_MetalDisplayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode]; // currentRunLoop; NSRunLoopCommonModes
+        // draw();
+
+        // buffer.waitUntilScheduled
+        // [drawable present];
     }
-
-@end
-
-@interface WindowDelegate : NSObject <NSWindowDelegate>
-    // id<MTLDevice> device;
-    // CAMetalLayer *metalLayer;
-@end
-@implementation WindowDelegate
-
-    - (BOOL) windowShouldClose:(NSWindow *)sender { return YES; }
-
-    - (void) windowDidResize:(NSNotification *)notification
-    {
-        NSWindow* w = notification.object;
-        NSSize newSize = w.contentView.frame.size;
-        // adjust your view or content here…
-
-        // _MetalLayer.drawableSize = CGSizeMake(690, 690);
-        // _MetalLayer.contentsScale = win.backingScaleFactor;
-    }
-
-    // - (void) windowDidBecomeKey:(NSNotification *)notification
-    // {
-    //     // Window became the key (focused) window.
-    // }
-
-@end
+}
 
 extern "C"
 {
+// functions that are called from zig side
+
     void init_and_open_window_osx ()
     {
         // NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 
         @autoreleasepool
         {
-            NSApplication *app = [NSApplication sharedApplication];
+            NSApplication* app = [NSApplication sharedApplication];
             [app setActivationPolicy:NSApplicationActivationPolicyRegular];
             [app setDelegate:[[AppDelegate alloc] init]];
 
@@ -164,16 +180,78 @@ extern "C"
             [_Window center];
             [_Window setDelegate:[[WindowDelegate alloc] init]];
 
-            [app run]; // runModalForWindow beginModalSessionForWindow
+            // _Window.allowsConcurrentViewDrawing = NO;
 
-            // render();
+            initMetal();
+
+            [app run]; // runModalForWindow beginModalSessionForWindow
         }
 
         // [pool drain];
     }
-
-    // void focus_window_osx ()
-    // {
-    //     [NSApp activate];
-    // }
 }
+
+static double _prevFrameTime;
+
+@implementation Renderer
+    - (instancetype) init:(NSWindow *)window
+    {
+        // not available on mac os
+        // displayLink = [_Window displayLinkWithTarget:() selector:(nonnull SEL)]
+        // displayLink = [CADisplayLink displayLinkWithTarget: self selector: @selector(repaintDisplayLink)];
+
+        displayLink = [window.screen displayLinkWithTarget:self selector:@selector(displayLinkUpdate:)];
+        return self;
+    }
+
+    - (void) startDisplayLink
+    {
+        [displayLink addToRunLoop: [NSRunLoop currentRunLoop] forMode: NSRunLoopCommonModes]; // mainRunLoop, currentRunLoop; NSDefaultRunLoopMode, NSRunLoopCommonModes
+    }
+
+    - (void) displayLinkUpdate:(CADisplayLink *)link
+    {
+        double currTime = CACurrentMediaTime();
+        // double deltaTime = currTime - _prevFrameTime;
+        // _prevFrameTime = currTime;
+
+        double workingTime = link.targetTimestamp - currTime; // this is a correct deltaTime
+
+        // NSLog(@"%f", deltaTime);
+        // NSLog(@"%f", workingTime);
+        // NSLog(@"%f", link.duration); // super stable but not right for deltaTime
+        // NSLog(@"%f", 1 / link.duration); // framerate
+
+        displayLinkUpdateLoop();
+    }
+@end
+
+@implementation WindowDelegate
+
+    - (BOOL) windowShouldClose:(NSWindow *)sender { return YES; }
+
+    - (void) windowDidResize:(NSNotification *)notification
+    {
+        // TODO force render on window resize
+
+        // NSWindow* w = notification.object;
+        // NSSize newSize = w.contentView.frame.size;
+
+        // NSLog(@"%s", "windowDidResize");
+    }
+
+@end
+
+@implementation AppDelegate
+
+    - (BOOL) applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender { return YES; }
+
+    - (void) applicationDidFinishLaunching:(NSNotification *)notification
+    {
+        init();
+
+        // TODO is it the perfect place to call it?
+        [_Renderer startDisplayLink];
+    }
+
+@end
