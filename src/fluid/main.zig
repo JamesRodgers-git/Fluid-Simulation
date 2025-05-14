@@ -3,16 +3,17 @@ const app = @import("app");
 const debug = @import("debug");
 const native = @import("native");
 
-// Platforms with no-entry like web do not call main
-pub fn main () void
+pub fn main () !void
 {
+    // const dir = try std.fs.cwd().openDir(".", .{ .iterate = true });
+    // var it = dir.iterate();
+    // while (try it.next()) |file|
+    //     debug.log("{s}", . { file.name });
+
     native.startApp();
     // On mac code doesn't execute here after [app run] from obj-c
 }
 
-// these parameters are not yet available in init call:
-// - view render size
-// -
 export fn init () void
 {
     debug.log("Platform: {s}", .{ @tagName(app.platform) });
@@ -24,8 +25,6 @@ export fn init () void
     debug.log("hiii", .{});
     debug.log("hi {}", .{5});
 }
-
-// update and draw are synchronised at the same refresh rate but sometimes draw can be skipped
 
 export fn update () void
 {

@@ -61,6 +61,7 @@ pub fn build (b: *std.Build) !void
     }
     else if (target.result.os.tag == .macos)
     {
+        try std.fs.cwd().makePath("zig-out/metal/");
         try std.fs.cwd().makePath("zig-out/lib/");
 
         const exe = b.addExecutable(.{
@@ -75,6 +76,15 @@ pub fn build (b: *std.Build) !void
             // .unwind_tables = .none,
             // .error_tracing = false
         });
+
+        const cmd_metal = b.addSystemCommand(&.{
+            "xcrun",
+            "-sdk", "macosx",
+            "metal", "src/fluid/shaders/shader.metal",
+            "-o", "zig-out/metal/shader.metallib",
+        });
+        // cmd_metal.addCheck(.{ .expect_term = .{ .Exited = 0 } });
+        // cmd_metal.has_side_effects = true;
 
         const cmd_objc = b.addSystemCommand(&.{
             // "swiftc",
@@ -92,11 +102,11 @@ pub fn build (b: *std.Build) !void
             "-o", "zig-out/lib/cocoa_osx.o",
             // "-framework", "Cocoa",
         });
-
         // cmd_objc.setCwd(b.path("src"));
         cmd_objc.addCheck(.{ .expect_term = .{ .Exited = 0 } });
         cmd_objc.has_side_effects = true;
 
+        exe.step.dependOn(&cmd_metal.step);
         exe.step.dependOn(&cmd_objc.step);
 
         // main_exe.linkLibC();
@@ -123,7 +133,7 @@ pub fn build (b: *std.Build) !void
         b.installArtifact(exe);
 
         const run = b.addRunArtifact(exe);
-        run.step.dependOn(b.getInstallStep());
+        // run.step.dependOn(b.getInstallStep()); // I don't know what it does
         b.step("run", "Run the app").dependOn(&run.step);
     }
 
