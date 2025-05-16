@@ -8,6 +8,8 @@ extern fn wasmConsoleLog (ptr: u32, len: u32) void;
 // var log_wasm_buffer: []u8 = undefined;
 // var log_wasm_buffer: [1024]u8 = undefined; // check if this affects build size on non wasm platforms
 
+var timer: std.time.Timer = undefined;
+
 pub fn init () void
 {
     // log_wasm_buffer = allocator.alloc(u8, 1024) catch return;
@@ -41,4 +43,17 @@ pub fn log (comptime format: []const u8, args: anytype) void
         },
         else => {}
     }
+}
+
+pub fn startTimer () void
+{
+    timer = std.time.Timer.start() catch unreachable;
+}
+
+pub fn printTimer () void
+{
+    const elapsed_ns = timer.read();
+    const microseconds = elapsed_ns / 1000;
+    const milliseconds = @as(f64, @floatFromInt(elapsed_ns)) / 1_000_000.0;
+    log("{0} µs, {1d:.3} ms", .{ microseconds, milliseconds });
 }

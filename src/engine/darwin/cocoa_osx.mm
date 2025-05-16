@@ -9,16 +9,19 @@
 #import <CoreVideo/CVDisplayLink.h>
 #import <MetalKit/MetalKit.h>
 
-__attribute__((constructor))
-static void enableMetalValidation (void)
-{
-    setenv("MTL_DEBUG_LAYER", "1", 1);
-    setenv("MTL_DEBUG_LAYER_ERROR_MODE", "nslog", 1);
-    setenv("MTL_DEBUG_LAYER_WARNING_MODE", "nslog", 1);
-    setenv("MTL_DEBUG_LAYER_VALIDATE_UNRETAINED_RESOURCES", "1", 1);
-    // setenv("MTL_SHADER_VALIDATION", "1", 1);
-    // setenv("METAL_DEVICE_WRAPPER_TYPE", "1", 1);
-}
+// __attribute__((constructor))
+// static void enableMetalValidation (void)
+// {
+//     setenv("MTL_DEBUG_LAYER", "1", 1);
+//     setenv("MTL_DEBUG_LAYER_ERROR_MODE", "nslog", 1);
+//     setenv("MTL_DEBUG_LAYER_WARNING_MODE", "nslog", 1);
+//     setenv("MTL_DEBUG_LAYER_VALIDATE_UNRETAINED_RESOURCES", "1", 1);
+//     // setenv("MTL_SHADER_VALIDATION", "1", 1);
+//     // setenv("METAL_DEVICE_WRAPPER_TYPE", "1", 1);
+
+//     setenv("MTL_HUD_ENABLED", "1", 1);
+//     // // setenv("MTL_HUD_LOG_ENABLED", "1", 1);
+// }
 
 extern "C"
 {
@@ -72,6 +75,7 @@ void initMetal ()
     _MetalLayer.framebufferOnly = YES;
     // kCGColorSpaceExtendedLinearSRGB or kCGColorSpaceExtendedSRGB for wide color; kCGColorSpaceDisplayP3, kCGColorSpaceExtendedLinearDisplayP3
     // _MetalLayer.autoresizingMask
+    // _MetalLayer.developerHUDProperties = @{ @"showGPUStats": @"YES" };
 
     _Window.contentView.wantsLayer = YES;
     _Window.contentView.layer = _MetalLayer;
@@ -92,49 +96,6 @@ void initMetal ()
 
     // NSLog(@"%@",_Window.deviceDescription);
     // NSLog(@"%f", _MetalLayer.maximumDrawableCount);
-
-    // NSString *shaderSource = @"#include <metal_stdlib>\n"
-    //                      "using namespace metal;\n"
-    //                      "vertex float4 vertexShader(uint vid [[vertex_id]]) {\n"
-    //                         "float2 positions[4] = {\n"
-    //                             "float2(-1.0, -1.0), // Bottom-left\n"
-    //                             "float2( 1.0, -1.0), // Bottom-right\n"
-    //                             "float2(-1.0,  1.0), // Top-left\n"
-    //                             "float2( 1.0,  1.0)  // Top-right\n"
-    //                         "};\n"
-    //                         "return float4(positions[vid], 0.0, 1.0);\n"
-    //                      "}\n"
-    //                      "fragment float4 fragmentShader() {\n"
-    //                      "    return float4(0.0, 1.0, 0.0, 1.0);\n"
-    //                      "}";
-
-    NSError *errors;
-
-    // NSArray *desktopFiles = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:@"./src/engine/darwin" error:&errors];
-    // NSLog(@"count: %d", desktopFiles.count);
-
-    // NSString *shaderSource = [NSString stringWithContentsOfFile:@"src/engine/darwin/shader.metal"
-    //                                                       encoding:NSUTF8StringEncoding 
-    //                                                          error:&errors];
-    // NSLog(@"%@", errors);
-
-    // id <MTLLibrary> library = [_MetalDevice newLibraryWithSource:shaderSource options:nil error:&errors];
-
-    id <MTLLibrary> library = [_MetalDevice newLibraryWithURL:[NSURL URLWithString:@"zig-out/metal/shader.metallib"] error:&errors];
-    id <MTLFunction> vertFunc = [library newFunctionWithName:@"vertexShader"];
-    id <MTLFunction> fragFunc = [library newFunctionWithName:@"fragmentShader"];
-
-    NSLog(@"%@", errors);
-
-    MTLRenderPipelineDescriptor* renderPipelineDesc = [[MTLRenderPipelineDescriptor alloc] init];
-    renderPipelineDesc.label = @"Simple Pipeline";
-    renderPipelineDesc.vertexFunction = vertFunc;
-    renderPipelineDesc.fragmentFunction = fragFunc;
-    renderPipelineDesc.vertexDescriptor = nil;
-    renderPipelineDesc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;//currentTexture.pixelFormat;
-    _renderPipeline = [_MetalDevice newRenderPipelineStateWithDescriptor:renderPipelineDesc error:&errors];
-    
-    NSLog(@"%@", errors);
 }
 
 bool resizeMetal ()
@@ -178,9 +139,9 @@ void displayLinkUpdateLoop ()
         id<MTLCommandBuffer> commandBuffer = [_MetalCommandQueue commandBuffer]; // commandBufferWithDescriptor, commandBufferWithUnretainedReferences
 
             MTLRenderPassDescriptor* passDesc = [MTLRenderPassDescriptor renderPassDescriptor];
-            passDesc.colorAttachments[0].loadAction = MTLLoadActionClear; // MTLLoadActionDontCare
+            passDesc.colorAttachments[0].loadAction = MTLLoadActionDontCare;//MTLLoadActionClear; // MTLLoadActionDontCare
             passDesc.colorAttachments[0].storeAction = MTLStoreActionStore;
-            passDesc.colorAttachments[0].clearColor = MTLClearColorMake(1.0, 0.0, 0.0, 1.0);
+            // passDesc.colorAttachments[0].clearColor = MTLClearColorMake(1.0, 0.0, 0.0, 1.0);
             passDesc.colorAttachments[0].texture = drawable.texture;
             id<MTLRenderCommandEncoder> encoder = [commandBuffer renderCommandEncoderWithDescriptor:passDesc];
                 // [encoder setViewport:(MTLViewport){0.0, 0.0, drawable.texture.width, drawable.texture.height, 0.0, 1.0 }];
@@ -235,6 +196,56 @@ extern "C"
         }
 
         // [pool drain];
+    }
+
+    void create_render_pipeline_metal (const void* ptr, size_t length)
+    {
+        // NSString *shaderSource = @"#include <metal_stdlib>\n"
+        //                      "using namespace metal;\n"
+        //                      "vertex float4 vertexShader(uint vid [[vertex_id]]) {\n"
+        //                         "float2 positions[4] = {\n"
+        //                             "float2(-1.0, -1.0), // Bottom-left\n"
+        //                             "float2( 1.0, -1.0), // Bottom-right\n"
+        //                             "float2(-1.0,  1.0), // Top-left\n"
+        //                             "float2( 1.0,  1.0)  // Top-right\n"
+        //                         "};\n"
+        //                         "return float4(positions[vid], 0.0, 1.0);\n"
+        //                      "}\n"
+        //                      "fragment float4 fragmentShader() {\n"
+        //                      "    return float4(0.0, 1.0, 0.0, 1.0);\n"
+        //                      "}";
+
+        NSError *err;
+
+        // NSArray *desktopFiles = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:@"./src/engine/darwin" error:&errors];
+        // NSLog(@"count: %d", desktopFiles.count);
+
+        // NSString *shaderSource = [NSString stringWithContentsOfFile:@"src/engine/darwin/shader.metal"
+        //                                                       encoding:NSUTF8StringEncoding 
+        //                                                          error:&errors];
+        // NSLog(@"%@", errors);
+
+        // id <MTLLibrary> library = [_MetalDevice newLibraryWithSource:shaderSource options:nil error:&errors];
+        // id<MTLLibrary> library = [_MetalDevice newLibraryWithURL:[NSURL URLWithString:@"zig-out/metal/shader.metallib"] error:&errors];
+
+        // NSData* nsdata = [NSData dataWithBytes:ptr length:length];
+        dispatch_data_t dispatch_data = dispatch_data_create(ptr, length, nil, nil); // dispatch_get_main_queue
+        id<MTLLibrary> library = [_MetalDevice newLibraryWithData:dispatch_data error:&err];
+        id<MTLFunction> vertFunc = [library newFunctionWithName:@"vertexShader"];
+        id<MTLFunction> fragFunc = [library newFunctionWithName:@"fragmentShader"];
+        [library release];
+
+        NSLog(@"%@", err);
+
+        MTLRenderPipelineDescriptor* renderPipelineDesc = [[MTLRenderPipelineDescriptor alloc] init];
+        renderPipelineDesc.label = @"Simple Pipeline";
+        renderPipelineDesc.vertexFunction = vertFunc;
+        renderPipelineDesc.fragmentFunction = fragFunc;
+        renderPipelineDesc.vertexDescriptor = nil;
+        renderPipelineDesc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;//currentTexture.pixelFormat;
+        _renderPipeline = [_MetalDevice newRenderPipelineStateWithDescriptor:renderPipelineDesc error:&err];
+        
+        NSLog(@"%@", err);
     }
 }
 

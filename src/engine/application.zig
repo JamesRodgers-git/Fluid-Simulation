@@ -21,6 +21,11 @@ pub const RuntimePlatform = enum
         return self == .ios or self == .android;
     }
 
+    pub fn supportFileSystem (comptime self: RuntimePlatform) bool
+    {
+        return self != .web;
+    }
+
     // pub fn tag (comptime self: RuntimePlatform) []const u8 //struct { []const u8 }
     // {
     //     return @tagName(self);

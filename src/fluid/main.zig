@@ -2,13 +2,13 @@ const std = @import("std");
 const app = @import("app");
 const debug = @import("debug");
 const native = @import("native");
+const files = @import("files");
+
+const resources = @import("library/resources.zig");
 
 pub fn main () !void
 {
-    // const dir = try std.fs.cwd().openDir(".", .{ .iterate = true });
-    // var it = dir.iterate();
-    // while (try it.next()) |file|
-    //     debug.log("{s}", . { file.name });
+    try files.init();
 
     native.startApp();
     // On mac code doesn't execute here after [app run] from obj-c
@@ -17,13 +17,16 @@ pub fn main () !void
 export fn init () void
 {
     debug.log("Platform: {s}", .{ @tagName(app.platform) });
+    // debug.log("Exe path: {s}", .{ files.exe_path });
+
+    resources.loadMetalResources();
 
     // build size grows quickly with every log
     // debug.init();
-    debug.log("hi", .{});
-    debug.log("hii", .{});
-    debug.log("hiii", .{});
-    debug.log("hi {}", .{5});
+    // debug.log("hi", .{});
+    // debug.log("hii", .{});
+    // debug.log("hiii", .{});
+    // debug.log("hi {}", .{5});
 }
 
 export fn update () void

@@ -21,15 +21,21 @@ const std = @import("std");
 
 fn addImports (b: *std.Build, module: *std.Build.Module) void
 {
+    // TODO need to find a way to easily cross import each module with every module
+    // atleast I need to include 'app' and 'debug' to every module I create
     const app = b.createModule(.{ .root_source_file = b.path("src/engine/application.zig") });
     const native = b.createModule(.{ .root_source_file = b.path("src/engine/native.zig") });
         native.addImport("app", app);
     const debug = b.createModule(.{ .root_source_file = b.path("src/engine/debug.zig") });
         debug.addImport("app", app);
+    const files = b.createModule(.{ .root_source_file = b.path("src/engine/files.zig") });
+        files.addImport("app", app);
+        files.addImport("debug", debug);
 
     module.addImport("app", app);
     module.addImport("native", native);
     module.addImport("debug", debug);
+    module.addImport("files", files);
 
     // module.addAnonymousImport("utils", "src/utils.zig");
 }
@@ -61,7 +67,7 @@ pub fn build (b: *std.Build) !void
     }
     else if (target.result.os.tag == .macos)
     {
-        try std.fs.cwd().makePath("zig-out/metal/");
+        // try std.fs.cwd().makePath("zig-out/metal/");
         try std.fs.cwd().makePath("zig-out/lib/");
 
         const exe = b.addExecutable(.{
@@ -77,11 +83,16 @@ pub fn build (b: *std.Build) !void
             // .error_tracing = false
         });
 
-        const cmd_metal = b.addSystemCommand(&.{
-            "xcrun",
-            "-sdk", "macosx",
-            "metal", "src/fluid/shaders/shader.metal",
-            "-o", "zig-out/metal/shader.metallib",
+        const cmd_metalir = b.addSystemCommand(&.{
+            "xcrun", "-sdk", "macosx", "metal",
+            "-o", "zig-out/bin/shader.ir",
+            "-c", "src/fluid/shaders/shader.metal",
+        });
+
+        const cmd_metallib = b.addSystemCommand(&.{
+            "xcrun", "-sdk", "macosx", "metallib",
+            "-o", "zig-out/bin/shader.metallib",
+            "zig-out/bin/shader.ir",
         });
         // cmd_metal.addCheck(.{ .expect_term = .{ .Exited = 0 } });
         // cmd_metal.has_side_effects = true;
@@ -106,7 +117,8 @@ pub fn build (b: *std.Build) !void
         cmd_objc.addCheck(.{ .expect_term = .{ .Exited = 0 } });
         cmd_objc.has_side_effects = true;
 
-        exe.step.dependOn(&cmd_metal.step);
+        cmd_metallib.step.dependOn(&cmd_metalir.step);
+        exe.step.dependOn(&cmd_metallib.step);
         exe.step.dependOn(&cmd_objc.step);
 
         // main_exe.linkLibC();
@@ -133,7 +145,7 @@ pub fn build (b: *std.Build) !void
         b.installArtifact(exe);
 
         const run = b.addRunArtifact(exe);
-        // run.step.dependOn(b.getInstallStep()); // I don't know what it does
+        run.step.dependOn(b.getInstallStep());
         b.step("run", "Run the app").dependOn(&run.step);
     }
 
