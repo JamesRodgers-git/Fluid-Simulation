@@ -1,3 +1,4 @@
+#include <AppKit/AppKit.h>
 #import <Cocoa/Cocoa.h>
 #include <CoreFoundation/CFDate.h>
 #include <objc/NSObject.h>
@@ -25,118 +26,64 @@
 
 extern "C"
 {
-// functions that are called from obj-c side
-// they all implemented in main.zig
+    // functions that are called from obj-c side
+    // they all implemented in main.zig
 
     void init ();
     void update ();
     void draw ();
 }
 
-@interface Renderer : NSObject
+// TODO MetalView and extern Metal functions should be in a separate file
+@interface MetalView : NSObject
 {
-    // TODO add CVDisplayLink to support mac os before 10.14
+    CGSize frameSize;
 
-    CADisplayLink *displayLink;
-    // NSWindow *_Window;
+    // TODO add CVDisplayLink to support mac os before 10.14
+    CADisplayLink *caDisplayLink;
 }
-- (instancetype)init:(NSWindow *)window;
+
+@property (readonly) id<MTLDevice> mtDevice;
+@property (readonly) CAMetalLayer* mtLayer;
+@property (readonly) id<MTLCommandQueue> mtCommandQueue;
+
+- (instancetype)initWithWindow:(NSWindow *)window;
 - (void) startDisplayLink;
-// - (void)createDisplayLink:(NSWindow *)window;
+- (bool) resizeWithWindow:(NSWindow *)window;
 @end
 
 @interface AppDelegate : NSObject <NSApplicationDelegate> @end
 @interface WindowDelegate : NSObject <NSWindowDelegate> @end
 
 // static makes it accessible only inside this file
-static CAMetalLayer* _MetalLayer;
-static id<MTLDevice> _MetalDevice;
-static id<MTLCommandQueue> _MetalCommandQueue;
-static id<MTLLibrary> _MetalLibrary;
-static Renderer* _Renderer;
+// TODO add support for multiple windows and views: use arrays
+static NSWindow* _window;
+static MetalView* _metalView;
 
-static NSWindow* _Window;
-static int _WindowWidth;
-static int _WindowHeight;
+// for simplicity, I won't implement deallocation. Every loaded shader remains forever.
+static NSMutableArray<id<MTLLibrary>>* _mtLibraries = [NSMutableArray arrayWithCapacity:64]; // loaded metal shader file
+static NSMutableArray<id<MTLRenderPipelineState>>* _mtPipelines = [NSMutableArray arrayWithCapacity:64]; // program with vert and frag
 
-static id<MTLRenderPipelineState> _renderPipeline;
-
-void initMetal ()
+void displayLinkUpdateLoop (MetalView* view)
 {
-    _MetalLayer = [CAMetalLayer layer];
-    _MetalDevice = MTLCreateSystemDefaultDevice();
-    _MetalCommandQueue = [_MetalDevice newCommandQueueWithMaxCommandBufferCount: 64];
-    _MetalLibrary = [_MetalDevice newDefaultLibrary];
-
-    _MetalLayer.device = _MetalDevice;
-    _MetalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm; // MTLPixelFormatRGBA8Unorm  // MTLPixelFormatBGRA8Unorm_sRGB; MTLPixelFormatRGBA16Float or MTLPixelFormatRGB10A2Unorm for HDR and wide gamut
-    _MetalLayer.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB); // nil, kCGColorSpaceGenericRGB
-    _MetalLayer.opaque = YES;
-    _MetalLayer.framebufferOnly = YES;
-    // kCGColorSpaceExtendedLinearSRGB or kCGColorSpaceExtendedSRGB for wide color; kCGColorSpaceDisplayP3, kCGColorSpaceExtendedLinearDisplayP3
-    // _MetalLayer.autoresizingMask
-    // _MetalLayer.developerHUDProperties = @{ @"showGPUStats": @"YES" };
-
-    _Window.contentView.wantsLayer = YES;
-    _Window.contentView.layer = _MetalLayer;
-
-    // TODO play with it
-    // _Window.contentView.layerContentsRedrawPolicy
-    // _Window.contentView.needsDisplay
-    // _Window.contentView.makeBackingLayer
-    // _Window.contentView.
-
-    // TODO play with these values
-    // _MetalLayer.maximumDrawableCount = 2; // default is 3
-    // _MetalLayer.allowsNextDrawableTimeout = false;
-    // _MetalLayer.presentsWithTransaction = true;
-    // _MetalLayer.displaySyncEnabled = false;
-
-    _Renderer = [[Renderer alloc] init:_Window];
-
-    // NSLog(@"%@",_Window.deviceDescription);
-    // NSLog(@"%f", _MetalLayer.maximumDrawableCount);
-}
-
-bool resizeMetal ()
-{
-    CGSize frameSize = _Window.frame.size;
-
-    if ((int)frameSize.width == _WindowWidth && (int)frameSize.height == _WindowHeight)
-        return false;
-
-    _WindowWidth = frameSize.width;
-    _WindowHeight = frameSize.height;
-
-    float scale = _Window.backingScaleFactor; // _Window.screen.backingScaleFactor
-    // _MetalLayer.frame = _Window.contentView.bounds;
-    _MetalLayer.drawableSize = CGSizeMake(frameSize.width * scale, frameSize.height * scale);
-    _MetalLayer.contentsScale = _Window.backingScaleFactor;
-
-    // NSLog(@"%f", _MetalLayer.drawableSize.width);
-
-    return true;
-}
-
-void displayLinkUpdateLoop ()
-{
-    bool needRedraw = false; // probably not needed
-    if (resizeMetal())
-        needRedraw = true;
+    bool needRedraw = [_metalView resizeWithWindow:_window]; // probably bool is not needed
 
     update();
 
     @autoreleasepool // is this ok?
     {
         // nextDrawable may block execution, good idea is to make it non blocking for non rendering update
-        id<CAMetalDrawable> drawable = [_MetalLayer nextDrawable];
+        id<CAMetalDrawable> drawable = [view.mtLayer nextDrawable];
         if (!drawable) return;
 
         // NSLog(@"%d", [_MetalLayer nextDrawable] != nil);
         // NSLog(@"x %f", _MetalLayer.drawableSize.width);
 
-        // 1 MTLCommandBuffer is enough for whole application
-        id<MTLCommandBuffer> commandBuffer = [_MetalCommandQueue commandBuffer]; // commandBufferWithDescriptor, commandBufferWithUnretainedReferences
+        // 1 MTLCommandBuffer per thread
+        id<MTLCommandBuffer> commandBuffer = [view.mtCommandQueue commandBuffer]; // commandBufferWithDescriptor, commandBufferWithUnretainedReferences
+
+            // TODO for simplicity at first, I will call draw inside commandBuffer
+            // draw();
 
             MTLRenderPassDescriptor* passDesc = [MTLRenderPassDescriptor renderPassDescriptor];
             passDesc.colorAttachments[0].loadAction = MTLLoadActionDontCare;//MTLLoadActionClear; // MTLLoadActionDontCare
@@ -145,15 +92,16 @@ void displayLinkUpdateLoop ()
             passDesc.colorAttachments[0].texture = drawable.texture;
             id<MTLRenderCommandEncoder> encoder = [commandBuffer renderCommandEncoderWithDescriptor:passDesc];
                 // [encoder setViewport:(MTLViewport){0.0, 0.0, drawable.texture.width, drawable.texture.height, 0.0, 1.0 }];
-                [encoder setRenderPipelineState:_renderPipeline];
-                [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
-                // [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+                if (_mtPipelines.count > 0)
+                {
+                    [encoder setRenderPipelineState:_mtPipelines[0]];
+                    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+                    // [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+                }
             [encoder endEncoding];
 
         [commandBuffer presentDrawable:drawable];
         [commandBuffer commit];
-
-        // draw();
 
         // buffer.waitUntilScheduled
         // [drawable present];
@@ -162,7 +110,7 @@ void displayLinkUpdateLoop ()
 
 extern "C"
 {
-// functions that are called from zig side
+    // functions that are called from zig side
 
     void init_and_open_window_osx ()
     {
@@ -177,20 +125,20 @@ extern "C"
             NSRect frame = NSMakeRect(0, 0, 690, 690);
             NSUInteger style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable;
 
-            _Window = [[NSWindow alloc] initWithContentRect:frame
+            _window = [[NSWindow alloc] initWithContentRect:frame
                                                   styleMask:style
                                                     backing:NSBackingStoreBuffered
                                                       defer:NO];
 
-            [_Window setTitle:@"fluid"];
-            [_Window setLevel:NSFloatingWindowLevel];
-            [_Window makeKeyAndOrderFront:nil];
-            [_Window center];
-            [_Window setDelegate:[[WindowDelegate alloc] init]];
+            [_window setTitle:@"fluid"];
+            [_window setLevel:NSFloatingWindowLevel];
+            [_window makeKeyAndOrderFront:nil];
+            [_window center];
+            [_window setDelegate:[[WindowDelegate alloc] init]];
 
-            // _Window.allowsConcurrentViewDrawing = NO;
+            // _window.allowsConcurrentViewDrawing = NO;
 
-            initMetal();
+            _metalView = [[MetalView alloc] initWithWindow:_window];
 
             [app run]; // runModalForWindow beginModalSessionForWindow
         }
@@ -198,7 +146,7 @@ extern "C"
         // [pool drain];
     }
 
-    void create_render_pipeline_metal (const void* ptr, size_t length)
+    size_t create_library_from_data_metal (const void* data_ptr, size_t data_len)
     {
         // NSString *shaderSource = @"#include <metal_stdlib>\n"
         //                      "using namespace metal;\n"
@@ -215,56 +163,101 @@ extern "C"
         //                      "    return float4(0.0, 1.0, 0.0, 1.0);\n"
         //                      "}";
 
-        NSError *err;
-
-        // NSArray *desktopFiles = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:@"./src/engine/darwin" error:&errors];
-        // NSLog(@"count: %d", desktopFiles.count);
-
-        // NSString *shaderSource = [NSString stringWithContentsOfFile:@"src/engine/darwin/shader.metal"
-        //                                                       encoding:NSUTF8StringEncoding 
-        //                                                          error:&errors];
-        // NSLog(@"%@", errors);
-
         // id <MTLLibrary> library = [_MetalDevice newLibraryWithSource:shaderSource options:nil error:&errors];
         // id<MTLLibrary> library = [_MetalDevice newLibraryWithURL:[NSURL URLWithString:@"zig-out/metal/shader.metallib"] error:&errors];
 
-        // NSData* nsdata = [NSData dataWithBytes:ptr length:length];
-        dispatch_data_t dispatch_data = dispatch_data_create(ptr, length, nil, nil); // dispatch_get_main_queue
-        id<MTLLibrary> library = [_MetalDevice newLibraryWithData:dispatch_data error:&err];
+        NSError *err = nil;
+        dispatch_data_t dispatch_data = dispatch_data_create(data_ptr, data_len, nil, nil); // dispatch_get_main_queue
+        id<MTLLibrary> library = [_metalView.mtDevice newLibraryWithData:dispatch_data error:&err];
+
+        // [dispatch_data release]; // TODO check this
+        // [library release];
+
+        if (err)
+        {
+            NSLog(@"%@", err);
+            return -1;
+        }
+
+        [_mtLibraries addObject:library];
+        return _mtLibraries.count - 1;
+    }
+
+    size_t create_pipeline_vertfrag_metal (size_t library_idx)
+    {
+        id<MTLLibrary> library = _mtLibraries[library_idx];
+
         id<MTLFunction> vertFunc = [library newFunctionWithName:@"vertexShader"];
         id<MTLFunction> fragFunc = [library newFunctionWithName:@"fragmentShader"];
-        [library release];
 
-        NSLog(@"%@", err);
+        MTLRenderPipelineDescriptor* desc = [[MTLRenderPipelineDescriptor alloc] init];
+        desc.label = @"Simple Pipeline";
+        desc.vertexFunction = vertFunc;
+        desc.fragmentFunction = fragFunc;
+        desc.vertexDescriptor = nil;
+        desc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;//currentTexture.pixelFormat;
 
-        MTLRenderPipelineDescriptor* renderPipelineDesc = [[MTLRenderPipelineDescriptor alloc] init];
-        renderPipelineDesc.label = @"Simple Pipeline";
-        renderPipelineDesc.vertexFunction = vertFunc;
-        renderPipelineDesc.fragmentFunction = fragFunc;
-        renderPipelineDesc.vertexDescriptor = nil;
-        renderPipelineDesc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;//currentTexture.pixelFormat;
-        _renderPipeline = [_MetalDevice newRenderPipelineStateWithDescriptor:renderPipelineDesc error:&err];
-        
-        NSLog(@"%@", err);
+        NSError *err = nil;
+        id<MTLRenderPipelineState> _renderPipeline = [_metalView.mtDevice newRenderPipelineStateWithDescriptor:desc error:&err];
+
+        if (err)
+        {
+            NSLog(@"%@", err);
+            return -1;
+        }
+
+        [_mtPipelines addObject:_renderPipeline];
+        return _mtPipelines.count - 1;
     }
 }
 
-static double _prevFrameTime;
+// static double _prevFrameTime;
 
-@implementation Renderer
-    - (instancetype) init:(NSWindow *)window
+@implementation MetalView
+    - (instancetype) initWithWindow:(NSWindow *)window
     {
+        _mtLayer = [CAMetalLayer layer];
+        _mtDevice = MTLCreateSystemDefaultDevice();
+        _mtCommandQueue = [_mtDevice newCommandQueueWithMaxCommandBufferCount: 64];
+
+        _mtLayer.device = _mtDevice;
+        _mtLayer.pixelFormat = MTLPixelFormatBGRA8Unorm; // MTLPixelFormatRGBA8Unorm  // MTLPixelFormatBGRA8Unorm_sRGB; MTLPixelFormatRGBA16Float or MTLPixelFormatRGB10A2Unorm for HDR and wide gamut
+        _mtLayer.colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB); // nil, kCGColorSpaceGenericRGB
+        _mtLayer.opaque = YES;
+        _mtLayer.framebufferOnly = YES;
+        // kCGColorSpaceExtendedLinearSRGB or kCGColorSpaceExtendedSRGB for wide color; kCGColorSpaceDisplayP3, kCGColorSpaceExtendedLinearDisplayP3
+        // _mtLayer.autoresizingMask
+        // _mtLayer.developerHUDProperties = @{ @"showGPUStats": @"YES" };
+
+        // TODO play with these values
+        // _mtLayer.maximumDrawableCount = 2; // default is 3
+        // _mtLayer.allowsNextDrawableTimeout = false;
+        // _mtLayer.presentsWithTransaction = true;
+        // _mtLayer.displaySyncEnabled = false;
+
+        window.contentView.wantsLayer = YES;
+        window.contentView.layer = _mtLayer;
+
+        // TODO play with it
+        // window.contentView.layerContentsRedrawPolicy
+        // window.contentView.needsDisplay
+        // window.contentView.makeBackingLayer
+        // window.contentView.
+
+        // NSLog(@"%@",_Window.deviceDescription);
+        // NSLog(@"%f", _MetalLayer.maximumDrawableCount);
+
         // not available on mac os
         // displayLink = [_Window displayLinkWithTarget:() selector:(nonnull SEL)]
         // displayLink = [CADisplayLink displayLinkWithTarget: self selector: @selector(repaintDisplayLink)];
 
-        displayLink = [window.screen displayLinkWithTarget:self selector:@selector(displayLinkUpdate:)];
+        caDisplayLink = [window.screen displayLinkWithTarget:self selector:@selector(displayLinkUpdate:)];
         return self;
     }
 
     - (void) startDisplayLink
     {
-        [displayLink addToRunLoop: [NSRunLoop currentRunLoop] forMode: NSRunLoopCommonModes]; // mainRunLoop, currentRunLoop; NSDefaultRunLoopMode, NSRunLoopCommonModes
+        [caDisplayLink addToRunLoop: [NSRunLoop currentRunLoop] forMode: NSRunLoopCommonModes]; // mainRunLoop, currentRunLoop; NSDefaultRunLoopMode, NSRunLoopCommonModes
     }
 
     - (void) displayLinkUpdate:(CADisplayLink *)link
@@ -280,7 +273,26 @@ static double _prevFrameTime;
         // NSLog(@"%f", link.duration); // super stable but not right for deltaTime
         // NSLog(@"%f", 1 / link.duration); // framerate
 
-        displayLinkUpdateLoop();
+        displayLinkUpdateLoop(self);
+    }
+
+    - (bool) resizeWithWindow:(NSWindow*) window
+    {
+        CGSize newSize = window.frame.size;
+
+        if ((int)newSize.width == frameSize.width && (int)newSize.height == frameSize.height)
+            return false;
+
+        frameSize = newSize;
+
+        float scale = window.backingScaleFactor; // _Window.screen.backingScaleFactor
+        // _MetalLayer.frame = _Window.contentView.bounds;
+        _mtLayer.drawableSize = CGSizeMake(newSize.width * scale, newSize.height * scale);
+        _mtLayer.contentsScale = window.backingScaleFactor;
+
+        // NSLog(@"%f", _MetalLayer.drawableSize.width);
+
+        return true;
     }
 @end
 
@@ -306,6 +318,6 @@ static double _prevFrameTime;
         init();
 
         // TODO is it the perfect place to call it?
-        [_Renderer startDisplayLink];
+        [_metalView startDisplayLink];
     }
 @end

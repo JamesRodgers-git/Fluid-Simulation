@@ -4,7 +4,7 @@ const debug = @import("debug");
 
 pub var exe_path: []const u8 = undefined;
 
-var exe_path_buffer: [1024]u8 = undefined; // TODO test if it affects wasm build size
+var exe_path_buffer: [1024]u8 = undefined; // TODO test if it affects wasm build size;
 
 pub fn init () !void
 {
@@ -33,6 +33,7 @@ pub fn loadFile (allocator: std.mem.Allocator, fileName: []const u8) !?[]u8
     defer file.close();
 
     const buffer = try file.readToEndAlloc(allocator, comptime kilobytesToBytes(32));
+    // const bytes_read = try file.reader().readAll(buf: []u8)
     return buffer;
 }
 
