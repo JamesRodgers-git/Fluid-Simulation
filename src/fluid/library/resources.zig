@@ -3,8 +3,8 @@ const app = @import("app");
 const debug = @import("debug");
 const files = @import("files");
 
-extern fn create_library_from_data_metal (data: [*]const u8, length: usize) usize;
-extern fn create_pipeline_vertfrag_metal (library_idx: usize) usize;
+extern fn createLibraryFromData_metal (data: [*]const u8, length: usize) i32;
+extern fn createPipelineVertFrag_metal (library_idx: i32) i32;
 
 pub fn loadMetalResources () void
 {
@@ -23,8 +23,8 @@ fn loadMetalShader (shaderName: []const u8) void
         if (buffer) |value|
         {
             defer allocator.free(value);
-            const library_idx = create_library_from_data_metal(value.ptr, value.len);
-            _ = create_pipeline_vertfrag_metal(library_idx);
+            const library_idx = createLibraryFromData_metal(value.ptr, value.len);
+            _ = createPipelineVertFrag_metal(library_idx);
         }
     }
 }

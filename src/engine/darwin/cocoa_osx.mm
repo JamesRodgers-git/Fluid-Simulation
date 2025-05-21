@@ -112,7 +112,7 @@ extern "C"
 {
     // functions that are called from zig side
 
-    void init_and_open_window_osx ()
+    void initAndOpenWindow_osx ()
     {
         // NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 
@@ -146,7 +146,7 @@ extern "C"
         // [pool drain];
     }
 
-    size_t create_library_from_data_metal (const void* data_ptr, size_t data_len)
+    int32_t createLibraryFromData_metal (const void* data_ptr, size_t data_len)
     {
         // NSString *shaderSource = @"#include <metal_stdlib>\n"
         //                      "using namespace metal;\n"
@@ -183,7 +183,7 @@ extern "C"
         return _mtLibraries.count - 1;
     }
 
-    size_t create_pipeline_vertfrag_metal (size_t library_idx)
+    int32_t createPipelineVertFrag_metal (int32_t library_idx)
     {
         id<MTLLibrary> library = _mtLibraries[library_idx];
 

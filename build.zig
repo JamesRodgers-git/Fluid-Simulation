@@ -19,27 +19,6 @@ const std = @import("std");
 // --release=small --release=safe  wasm32-freestanding wasm32-wasi wasm32-emscripten
 // --verbose
 
-fn addImports (b: *std.Build, module: *std.Build.Module) void
-{
-    // TODO need to find a way to easily cross import each module with every module
-    // atleast I need to include 'app' and 'debug' to every module I create
-    const app = b.createModule(.{ .root_source_file = b.path("src/engine/application.zig") });
-    const native = b.createModule(.{ .root_source_file = b.path("src/engine/native.zig") });
-        native.addImport("app", app);
-    const debug = b.createModule(.{ .root_source_file = b.path("src/engine/debug.zig") });
-        debug.addImport("app", app);
-    const files = b.createModule(.{ .root_source_file = b.path("src/engine/files.zig") });
-        files.addImport("app", app);
-        files.addImport("debug", debug);
-
-    module.addImport("app", app);
-    module.addImport("native", native);
-    module.addImport("debug", debug);
-    module.addImport("files", files);
-
-    // module.addAnonymousImport("utils", "src/utils.zig");
-}
-
 pub fn build (b: *std.Build) !void
 {
     const target = b.standardTargetOptions(.{});
@@ -62,7 +41,7 @@ pub fn build (b: *std.Build) !void
 
         // exe.root_module.export_symbol_names
 
-        addImports(b, exe.root_module);
+        addCommonImports(b, exe.root_module);
         b.installArtifact(exe);
     }
     else if (target.result.os.tag == .macos)
@@ -82,6 +61,7 @@ pub fn build (b: *std.Build) !void
             // .unwind_tables = .none,
             // .error_tracing = false
         });
+        // exe.entry = .{ .symbol_name = "init" };
 
         const cmd_metalir = b.addSystemCommand(&.{
             "xcrun", "-sdk", "macosx", "metal",
@@ -98,35 +78,41 @@ pub fn build (b: *std.Build) !void
         // cmd_metal.has_side_effects = true;
 
         const cmd_objc = b.addSystemCommand(&.{
-            // "swiftc",
-            // "window.swift",
-            // "-emit-library",
-            // "-emit-objc-header",
-            // "-emit-clang-header-path",
-            // "-static-stdlib",
-            // "-static",
-            // "-o", "libwindow.a", "window.swift"
-
             "clang",
             // "-O3",
-            "-c", "src/engine/darwin/cocoa_osx.mm",
             "-o", "zig-out/lib/cocoa_osx.o",
+            "-c", "src/engine/darwin/cocoa_osx.mm",
             // "-framework", "Cocoa",
         });
         // cmd_objc.setCwd(b.path("src"));
         cmd_objc.addCheck(.{ .expect_term = .{ .Exited = 0 } });
         cmd_objc.has_side_effects = true;
 
+        // const cmd_swift = b.addSystemCommand(&.{
+        //     "xcrun", "swiftc",
+        //     "-emit-object",
+        //     // "-parse-as-library",
+        //     // "-target-cpu" // for the future
+        //     "-I", "src/engine/darwin/",
+        //     // "-cxx-interoperability-mode=default",
+        //     "-o", "zig-out/lib/cocoa_osx.o",
+        //     "src/engine/darwin/cocoa_osx.swift"
+        // });
+
         cmd_metallib.step.dependOn(&cmd_metalir.step);
         exe.step.dependOn(&cmd_metallib.step);
         exe.step.dependOn(&cmd_objc.step);
+        // exe.step.dependOn(&cmd_swift.step);
 
         // main_exe.linkLibC();
         // main_exe.linkLibCpp();
         // main_exe.linkFramework("Foundation");
+
+        exe.linkFramework("Foundation");
         exe.linkFramework("Cocoa");
         exe.linkFramework("Metal");
         exe.linkFramework("QuartzCore");
+
         exe.addObjectFile(b.path("zig-out/lib/cocoa_osx.o"));
 
         // main_exe.addLibraryPath(std.Build.LazyPath {
@@ -141,15 +127,55 @@ pub fn build (b: *std.Build) !void
         // main_exe.addFrameworkPath(b.path("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"));
         // main_exe.addIncludePath(lazy_path: LazyPath)
 
-        addImports(b, exe.root_module);
+        addCommonImports(b, exe.root_module);
         b.installArtifact(exe);
 
         const run = b.addRunArtifact(exe);
         run.step.dependOn(b.getInstallStep());
         b.step("run", "Run the app").dependOn(&run.step);
     }
+}
 
+fn addCommonImports (b: *std.Build, root_module: *std.Build.Module) void
+{
+    const app = b.createModule(.{ .root_source_file = b.path("src/engine/application.zig") });
+    const native = b.createModule(.{ .root_source_file = b.path("src/engine/native.zig") });
+        // native.addImport("app", app);
+    const debug = b.createModule(.{ .root_source_file = b.path("src/engine/debug.zig") });
+        // debug.addImport("app", app);
+    const files = b.createModule(.{ .root_source_file = b.path("src/engine/files.zig") });
+        // files.addImport("app", app);
+        // files.addImport("debug", debug);
 
+    importModulesToEachOtherAndToRoot(root_module, &.{
+        .{ .name = "app", .module = app },
+        .{ .name = "native", .module = native },
+        .{ .name = "debug", .module = debug },
+        .{ .name = "files", .module = files },
+    });
+
+    // root_module.addImport("app", app);
+    // root_module.addImport("native", native);
+    // root_module.addImport("debug", debug);
+    // root_module.addImport("files", files);
+
+    // module.addAnonymousImport("utils", "src/utils.zig");
+}
+
+fn importModulesToEachOtherAndToRoot (root_module: *std.Build.Module, modules: []const struct { name: []const u8, module: *std.Build.Module }) void
+{
+    for (modules) |group|
+    {
+        for (modules) |tuple|
+        {
+            if (group.module != tuple.module)
+                group.module.addImport(tuple.name, tuple.module);
+        }
+    }
+
+    for (modules) |tuple|
+        root_module.addImport(tuple.name, tuple.module);
+}
 
     // const dep_sokol = b.dependency("sokol", .{
     //     .target = target,
@@ -219,7 +245,8 @@ pub fn build (b: *std.Build) !void
 
     // const check = b.step("check", "Check if fluid compiles");
     // check.dependOn(&exe_check.step);
-}
+
+
 
 // fn buildShaders (b: *std.Build) !?*std.Build.Step.Run
 // {
@@ -245,6 +272,3 @@ pub fn build (b: *std.Build) !void
 //         .reflection = true,
 //     });
 // }
-
-
-

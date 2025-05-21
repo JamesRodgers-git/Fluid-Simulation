@@ -6,6 +6,9 @@ const files = @import("files");
 
 const resources = @import("library/resources.zig");
 
+// pub const _start = void;
+// pub const WinMainCRTStartup = void;
+
 pub fn main () !void
 {
     try files.init();

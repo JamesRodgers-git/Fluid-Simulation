@@ -1,17 +1,20 @@
 import Cocoa
+import Fluid
 
-// couldn't figure out how to compile swift into library
-// that can be used in zig, so I use objective-c instead
+// couldn't figure out how to link swift's system libraries into zig compile step
+// so I use objective-c instead
 
-// "swiftc",
-// "-emit-library",
-// "-emit-objc-header",
-// "-emit-clang-header-path",
-// "-static-stdlib",
-// "-static",
-// "-o", "test.a", "test.swift"
+// bridge.h and module.modulemap is part of this swift code
 
-@_cdecl("test_osx")
-public func test ()
+// "xcrun", "swiftc",
+// "-emit-object",
+// "-I", "src/engine/darwin/",
+// "-o", "zig-out/lib/test.o",
+// "src/engine/darwin/test.swift"
+
+@_cdecl("swift_test")
+public func swift_test ()
 {
+    // print("hi");
+    update();
 }
