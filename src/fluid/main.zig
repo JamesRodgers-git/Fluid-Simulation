@@ -6,30 +6,29 @@ const files = @import("files");
 
 const resources = @import("library/resources.zig");
 
+// If I want to remove _main, I also need to disable _start
 // pub const _start = void;
 // pub const WinMainCRTStartup = void;
 
-pub fn main () !void
+pub fn main () void
 {
-    try files.init();
-
+    // native.startApp(&start);
     native.startApp();
-    // On mac code doesn't execute here after [app run] from obj-c
 }
 
-export fn init () void
+export fn start () void
 {
-    debug.log("Platform: {s}", .{ @tagName(app.platform) });
+    files.init() catch unreachable;
+
+    // debug.log("Platform: {s}", .{ @tagName(app.platform) });
     // debug.log("Exe path: {s}", .{ files.exe_path });
 
     resources.loadMetalResources();
 
-    // build size grows quickly with every log
-    // debug.init();
+    // wasm build size grows quickly with every log
     // debug.log("hi", .{});
     // debug.log("hii", .{});
     // debug.log("hiii", .{});
-    // debug.log("hi {}", .{5});
 }
 
 export fn update () void
@@ -43,11 +42,25 @@ export fn draw () void
 }
 
 
-// const sokol = @import("sokol");
-// const slog = sokol.log;
-// const sg = sokol.gfx;
-// const sapp = sokol.app;
-// const sglue = sokol.glue;
+// pub const std_options: std.Options = .{
+//     // By default, in safe build modes, the standard library will attach a segfault handler to the program to
+//     // print a helpful stack trace if a segmentation fault occurs. Here, we can disable this, or even enable
+//     // it in unsafe build modes.
+//     .enable_segfault_handler = true,
+// };
+
+// pub const panic = std.debug.FullPanic(panic);
+
+// pub fn panic (msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn
+// {
+//     _ = error_return_trace;
+//     // _ = msg;
+//     _ = ret_addr;
+//     std.debug.print("Panic! {s}\n", .{msg});
+//     // std.debug.print("yooo", .{});
+//     std.process.exit(1);
+// }
+
 
 // const shd = @import("shaders/fluid.glsl.zig");
 
@@ -58,76 +71,3 @@ export fn draw () void
 //     var pass_action: sg.PassAction = .{}; // global
 //     // pass_action: sg.PassAction // local
 // };
-
-// var pass_action: sg.PassAction = .{}; // global
-// const pass_action: sg.PassAction = .{}; // global const
-
-// export fn init () void
-// {
-//     sg.setup(.{
-//         .environment = sglue.environment(),
-//         .logger = .{ .func = slog.func },
-//     });
-//     State.pass_action.colors[0] = .{
-//         .load_action = .CLEAR,
-//         .clear_value = .{ .r = 1, .g = 1, .b = 0, .a = 1 },
-//     };
-
-//     // var atts_desc = sg.AttachmentsDesc{};
-//     // atts_desc.colors[0].image = color_img;
-//     // atts_desc.depth_stencil.image = depth_img;
-//     // state.offscreen.attachments = sg.makeAttachments(atts_desc);
-
-
-//     // a shader and pipeline state object
-//     State.pip = sg.makePipeline(.{
-//         .shader = sg.makeShader(shd.fluidShaderDesc(sg.queryBackend())),
-//         .layout = init: {
-//             var l = sg.VertexLayoutState{};
-//             l.attrs[shd.ATTR_fluid_position].format = .FLOAT3;
-//             l.attrs[shd.ATTR_fluid_color0].format = .FLOAT4;
-//             break :init l;
-//         },
-//         .index_type = .UINT16,
-//     });
-    
-
-//     // a vertex buffer
-//     State.bind.vertex_buffers[0] = sg.makeBuffer(.{
-//         .data = sg.asRange(&[_]f32{
-//             // positions      colors
-//             -0.5, 0.5,  0.5, 1.0, 0.0, 0.0, 1.0,
-//             0.5,  0.5,  0.5, 0.0, 1.0, 0.0, 1.0,
-//             0.5,  -0.5, 0.5, 0.0, 0.0, 1.0, 1.0,
-//             -0.5, -0.5, 0.5, 1.0, 1.0, 0.0, 1.0,
-//         }),
-//     });
-
-//     // an index buffer
-//     State.bind.index_buffer = sg.makeBuffer(.{
-//         .type = .INDEXBUFFER,
-//         .data = sg.asRange(&[_]u16{ 0, 1, 2, 0, 2, 3 }),
-//     });
-
-
-//     std.debug.print("Backend: {}\n", .{sg.queryBackend()});
-
-//     // std.debug.panic("Fake NullReferenceException\n", .{});
-// }
-
-// export fn frame () void
-// {
-//     // const g = State.pass_action.colors[0].clear_value.g + 0.01;
-//     // State.pass_action.colors[0].clear_value.g = if (g > 1.0) 0.0 else g;
-//     sg.beginPass(.{ .action = State.pass_action, .swapchain = sglue.swapchain() });
-//         sg.applyPipeline(State.pip);
-//         sg.applyBindings(State.bind);
-//         sg.draw(0, 6, 1);
-//     sg.endPass();
-//     sg.commit();
-// }
-
-// export fn cleanup () void
-// {
-//     sg.shutdown();
-// }

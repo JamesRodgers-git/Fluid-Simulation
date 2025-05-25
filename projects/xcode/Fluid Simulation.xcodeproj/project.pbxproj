@@ -7,14 +7,107 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		B9471FDD2DD4584000720266 /* src */ = {isa = PBXFileReference; lastKnownFileType = folder; name = src; path = ../../src; sourceTree = "<group>"; };
+		B9471FF02DE00FF300720266 /* bridge.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bridge.h; sourceTree = "<group>"; };
+		B9471FF12DE00FF300720266 /* module.modulemap */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = "sourcecode.module-map"; path = module.modulemap; sourceTree = "<group>"; };
+		B9471FF32DE00FF300720266 /* cocoa_osx.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = cocoa_osx.mm; sourceTree = "<group>"; };
+		B9471FF42DE00FF300720266 /* cocoa_osx.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = cocoa_osx.swift; sourceTree = "<group>"; };
+		B9471FF62DE00FF300720266 /* application.zig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = application.zig; sourceTree = "<group>"; };
+		B9471FF72DE00FF300720266 /* debug.zig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = debug.zig; sourceTree = "<group>"; };
+		B9471FF82DE00FF300720266 /* files.zig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = files.zig; sourceTree = "<group>"; };
+		B9471FF92DE00FF300720266 /* graphics.zig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = graphics.zig; sourceTree = "<group>"; };
+		B9471FFA2DE00FF300720266 /* native.zig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = native.zig; sourceTree = "<group>"; };
+		B9471FFC2DE00FF300720266 /* resources.zig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = resources.zig; sourceTree = "<group>"; };
+		B9471FFE2DE00FF300720266 /* fluid.glsl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = fluid.glsl; sourceTree = "<group>"; };
+		B9471FFF2DE00FF300720266 /* fluid.glsl.zig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = fluid.glsl.zig; sourceTree = "<group>"; };
+		B94720002DE00FF300720266 /* shader.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = shader.metal; sourceTree = "<group>"; };
+		B94720022DE00FF300720266 /* main.zig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = main.zig; sourceTree = "<group>"; };
+		B94720042DE00FF300720266 /* main.zig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = main.zig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		B9471FF22DE00FF300720266 /* include */ = {
+			isa = PBXGroup;
+			children = (
+				B9471FF02DE00FF300720266 /* bridge.h */,
+				B9471FF12DE00FF300720266 /* module.modulemap */,
+			);
+			path = include;
+			sourceTree = "<group>";
+		};
+		B9471FF52DE00FF300720266 /* darwin */ = {
+			isa = PBXGroup;
+			children = (
+				B9471FF22DE00FF300720266 /* include */,
+				B9471FF32DE00FF300720266 /* cocoa_osx.mm */,
+				B9471FF42DE00FF300720266 /* cocoa_osx.swift */,
+			);
+			path = darwin;
+			sourceTree = "<group>";
+		};
+		B9471FFB2DE00FF300720266 /* engine */ = {
+			isa = PBXGroup;
+			children = (
+				B9471FF52DE00FF300720266 /* darwin */,
+				B9471FF62DE00FF300720266 /* application.zig */,
+				B9471FF72DE00FF300720266 /* debug.zig */,
+				B9471FF82DE00FF300720266 /* files.zig */,
+				B9471FF92DE00FF300720266 /* graphics.zig */,
+				B9471FFA2DE00FF300720266 /* native.zig */,
+			);
+			path = engine;
+			sourceTree = "<group>";
+		};
+		B9471FFD2DE00FF300720266 /* library */ = {
+			isa = PBXGroup;
+			children = (
+				B9471FFC2DE00FF300720266 /* resources.zig */,
+			);
+			path = library;
+			sourceTree = "<group>";
+		};
+		B94720012DE00FF300720266 /* shaders */ = {
+			isa = PBXGroup;
+			children = (
+				B9471FFE2DE00FF300720266 /* fluid.glsl */,
+				B9471FFF2DE00FF300720266 /* fluid.glsl.zig */,
+				B94720002DE00FF300720266 /* shader.metal */,
+			);
+			path = shaders;
+			sourceTree = "<group>";
+		};
+		B94720032DE00FF300720266 /* fluid */ = {
+			isa = PBXGroup;
+			children = (
+				B9471FFD2DE00FF300720266 /* library */,
+				B94720012DE00FF300720266 /* shaders */,
+				B94720022DE00FF300720266 /* main.zig */,
+			);
+			path = fluid;
+			sourceTree = "<group>";
+		};
+		B94720052DE00FF300720266 /* your_project_goes_here */ = {
+			isa = PBXGroup;
+			children = (
+				B94720042DE00FF300720266 /* main.zig */,
+			);
+			path = your_project_goes_here;
+			sourceTree = "<group>";
+		};
+		B94720062DE00FF300720266 /* src */ = {
+			isa = PBXGroup;
+			children = (
+				B9471FFB2DE00FF300720266 /* engine */,
+				B94720032DE00FF300720266 /* fluid */,
+				B94720052DE00FF300720266 /* your_project_goes_here */,
+			);
+			name = src;
+			path = ../../src;
+			sourceTree = "<group>";
+		};
 		B99B810B2DD45360003FB7BA = {
 			isa = PBXGroup;
 			children = (
-				B9471FDD2DD4584000720266 /* src */,
+				B94720062DE00FF300720266 /* src */,
 			);
 			sourceTree = "<group>";
 		};

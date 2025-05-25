@@ -1,3 +1,6 @@
+// I don't use objective-c anymore
+// preserved just in case
+
 #include <AppKit/AppKit.h>
 #import <Cocoa/Cocoa.h>
 #include <CoreFoundation/CFDate.h>

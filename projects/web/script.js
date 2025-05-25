@@ -50,7 +50,7 @@ function startWasm () {
 
         // const tbl = obj.instance.exports.tbl;
         // console.log(obj);
-        exports.init();
+        exports.start();
         update();
     });
 }

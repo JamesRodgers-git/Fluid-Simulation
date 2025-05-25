@@ -25,8 +25,6 @@ pub fn build (b: *std.Build) !void
     const optimize = b.standardOptimizeOption(.{});
 
     //const target = b.resolveTargetQuery(.{ .os_tag = .macos });
-    //const target = b.resolveTargetQuery(.{ .os_tag = .windows });
-    //const target = b.resolveTargetQuery(.{ .os_tag = .linux });
 
     if (target.result.cpu.arch.isWasm())
     {
@@ -46,7 +44,6 @@ pub fn build (b: *std.Build) !void
     }
     else if (target.result.os.tag == .macos)
     {
-        // try std.fs.cwd().makePath("zig-out/metal/");
         try std.fs.cwd().makePath("zig-out/lib/");
 
         const exe = b.addExecutable(.{
@@ -62,6 +59,15 @@ pub fn build (b: *std.Build) !void
             // .error_tracing = false
         });
         // exe.entry = .{ .symbol_name = "init" };
+        // exe.entry = .disabled;
+
+        // const exe_lib = b.addStaticLibrary(.{
+        //     .name = "fluid",
+        //     .target = target,
+        //     .optimize = optimize,
+        //     .root_source_file = b.path("src/fluid/main.zig"),
+        // });
+        // exe_lib.entry = .disabled;
 
         const cmd_metalir = b.addSystemCommand(&.{
             "xcrun", "-sdk", "macosx", "metal",
@@ -74,61 +80,57 @@ pub fn build (b: *std.Build) !void
             "-o", "zig-out/bin/shader.metallib",
             "zig-out/bin/shader.ir",
         });
-        // cmd_metal.addCheck(.{ .expect_term = .{ .Exited = 0 } });
-        // cmd_metal.has_side_effects = true;
+        // cmd_metallib.addCheck(.{ .expect_term = .{ .Exited = 0 } });
+        // cmd_metallib.has_side_effects = true;
 
-        const cmd_objc = b.addSystemCommand(&.{
-            "clang",
-            // "-O3",
-            "-o", "zig-out/lib/cocoa_osx.o",
-            "-c", "src/engine/darwin/cocoa_osx.mm",
-            // "-framework", "Cocoa",
-        });
-        // cmd_objc.setCwd(b.path("src"));
-        cmd_objc.addCheck(.{ .expect_term = .{ .Exited = 0 } });
-        cmd_objc.has_side_effects = true;
-
-        // const cmd_swift = b.addSystemCommand(&.{
-        //     "xcrun", "swiftc",
-        //     "-emit-object",
-        //     // "-parse-as-library",
-        //     // "-target-cpu" // for the future
-        //     "-I", "src/engine/darwin/",
-        //     // "-cxx-interoperability-mode=default",
+        // const cmd_objc = b.addSystemCommand(&.{
+        //     "clang",
+        //     // "-O3",
         //     "-o", "zig-out/lib/cocoa_osx.o",
-        //     "src/engine/darwin/cocoa_osx.swift"
+        //     "-c", "src/engine/darwin/cocoa_osx.mm",
         // });
 
-        cmd_metallib.step.dependOn(&cmd_metalir.step);
-        exe.step.dependOn(&cmd_metallib.step);
-        exe.step.dependOn(&cmd_objc.step);
-        // exe.step.dependOn(&cmd_swift.step);
+        const cmd_swift = b.addSystemCommand(&.{
+            "xcrun", "swiftc",
+            "-emit-object",
+            // "-emit-library", // this one also exports _main and use linker magic
+            "-static", // does it work?
+            "-parse-as-library", // removes _main
 
-        // main_exe.linkLibC();
-        // main_exe.linkLibCpp();
-        // main_exe.linkFramework("Foundation");
+            "-I", "src/engine/darwin/",
+            "-o", "zig-out/lib/cocoa_osx.o",
 
-        exe.linkFramework("Foundation");
-        exe.linkFramework("Cocoa");
-        exe.linkFramework("Metal");
-        exe.linkFramework("QuartzCore");
+            // sources:
+            "src/engine/darwin/cocoa_osx.swift",
 
+            if (optimize == .Debug) "-Onone" else "-O",
+
+            // for the future
+            // "-target-cpu"
+            // "-target",
+            // b.fmt("{s}-apple-macosx{}", .{
+            //     @tagName(target.result.cpu.arch),
+            //     target.result.os.version_range.semver.min,
+            // }),
+        });
+        if (optimize == .Debug) cmd_swift.addArgs(&.{ "-D", "DEBUG" });
+        // exe.addArg("-mmacos-version-min=11.0"); // sets minimum macos version
+
+        const install_exe = b.addInstallArtifact(exe, .{});
+
+        addLibrariesOSX(b, target, exe);
+        addCommonImports(b, exe.root_module);
         exe.addObjectFile(b.path("zig-out/lib/cocoa_osx.o"));
 
-        // main_exe.addLibraryPath(std.Build.LazyPath {
-        //     .cwd_relative = "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx",
-        // });
-        // main_exe.linkSystemLibrary("swiftCore");
+        sequence(b, &.{
+            &cmd_metalir.step,
+            &cmd_metallib.step,
+        });
 
-        // lib.installHeadersDirectory(b.path("src"), "", .{});
-        // exe.addIncludeDir("/usr/local/include/SDL2");
-        // exe.addLibPath("/usr/local/lib");
-        
-        // main_exe.addFrameworkPath(b.path("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"));
-        // main_exe.addIncludePath(lazy_path: LazyPath)
-
-        addCommonImports(b, exe.root_module);
-        b.installArtifact(exe);
+        sequence(b, &.{
+            &cmd_swift.step,
+            &install_exe.step,
+        });
 
         const run = b.addRunArtifact(exe);
         run.step.dependOn(b.getInstallStep());
@@ -162,6 +164,61 @@ fn addCommonImports (b: *std.Build, root_module: *std.Build.Module) void
     // module.addAnonymousImport("utils", "src/utils.zig");
 }
 
+fn addLibrariesOSX (b: *std.Build, target: std.Build.ResolvedTarget, exe: *std.Build.Step.Compile) void
+{
+    //~ xcrun --show-sdk-path
+    const sdk = std.zig.system.darwin.getSdk(b.allocator, target.result).?;
+    // std.log.debug("{s}", .{ sdk.? });
+
+    // obj-c libraries
+    // exe.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/", .{sdk}) });
+    // exe.addFrameworkPath(.{ .cwd_relative = b.fmt("{s}/System/Library/Frameworks/", .{sdk}) });
+    // exe.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib/", .{sdk}) });
+
+    // swift libraries
+    exe.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib/swift/", .{sdk}) });
+    // exe.addRPath(.{ .cwd_relative = b.fmt("{s}/usr/lib/swift/", .{sdk}) }); // what the hell is RPath?
+
+    // exe.linkLibC();
+    // exe.linkLibCpp();
+
+    exe.linkFramework("Foundation");
+    exe.linkFramework("Cocoa");
+    exe.linkFramework("Metal");
+    exe.linkFramework("QuartzCore");
+    // exe.linkFramework("CoreGraphics");
+
+    // force static linking, can be useful in a future
+    // exe.addObjectFile(.{ .cwd_relative = b.fmt("{s}/usr/lib/swift_static/macosx/libswiftCore.a", .{sdk}) });
+    // or bundle swift runtime when releasing
+    // TODO
+
+    // shows system libraries that library use
+    //~ nm -u zig-out/lib/cocoa_osx.o | grep swift
+
+    // show all dynamically linked libraries of exe
+    //~ otool -L zig-out/bin/fluid
+
+    // shows runtime search paths of exe
+    //~ otool -l zig-out/bin/fluid | grep -A2 LC_RPATH
+
+    exe.linkSystemLibrary("swiftCore");
+    exe.linkSystemLibrary("swiftFoundation");
+    exe.linkSystemLibrary("swift_Concurrency");
+    exe.linkSystemLibrary("swiftDispatch");
+    exe.linkSystemLibrary("swiftObjectiveC");
+    exe.linkSystemLibrary("swiftCoreGraphics");
+    exe.linkSystemLibrary("swiftMetal");
+    exe.linkSystemLibrary("swiftQuartzCore");
+    exe.linkSystemLibrary("swiftIOKit");
+    exe.linkSystemLibrary("swiftXPC");
+    exe.linkSystemLibrary("swiftos");
+    exe.linkSystemLibrary("swiftCoreFoundation");
+    exe.linkSystemLibrary("swiftCoreImage");
+    exe.linkSystemLibrary("swiftDarwin");
+    exe.linkSystemLibrary("swiftUniformTypeIdentifiers");
+}
+
 fn importModulesToEachOtherAndToRoot (root_module: *std.Build.Module, modules: []const struct { name: []const u8, module: *std.Build.Module }) void
 {
     for (modules) |group|
@@ -177,98 +234,28 @@ fn importModulesToEachOtherAndToRoot (root_module: *std.Build.Module, modules: [
         root_module.addImport(tuple.name, tuple.module);
 }
 
-    // const dep_sokol = b.dependency("sokol", .{
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
+fn sequence (b: *std.Build, steps: []const *std.Build.Step) void
+{
+    if (steps.len == 0) return;
+    if (steps.len == 1)
+    {
+        b.default_step.dependOn(steps[0]);
+        return;
+    }
 
-    // const exe_mod = b.createModule(.{
-    //     .root_source_file = b.path("src/main.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    //     // .imports = &.{
-    //     //     .{ .name = "sokol", .module = dep_sokol }
-    //     // }
-    //     // .unwind_tables = .none,
-    //     // .strip = true
-    // });
-    // exe_mod.addImport("sokol", dep_sokol.module("sokol"));
-
-    // if (target.result.cpu.arch.isWasm())
-    // {
-    //     // const opt_shd_step = try buildShaders(b);
-
-    //     const main = b.addStaticLibrary(.{
-    //         .name = "fluid",
-    //         .target = target,
-    //         .optimize = optimize,
-    //         .root_source_file = b.path("src/main.zig"),
-    //     });
-    //     main.root_module.addImport("sokol", dep_sokol.module("sokol"));
-
-    //     // if (opt_shd_step) |shd_step|
-    //     //     main.step.dependOn(&shd_step.step);
-
-    //     // Emscripten linker
-    //     const emsdk = dep_sokol.builder.dependency("emsdk", .{});
-    //     const link_step = try sokol.emLinkStep(b, .{
-    //         .lib_main = main,
-    //         .target = target,
-    //         .optimize = optimize,
-    //         .emsdk = emsdk,
-    //         .use_webgpu = false,
-    //         .use_webgl2 = true,
-    //         .use_emmalloc = true,
-    //         .use_filesystem = false,
-    //         // .use_offset_converter = true,
-    //         // .extra_args = &.{"-sSTACK_SIZE=512KB"},
-    //         .shell_file_path = dep_sokol.path("src/sokol/web/shell.html"),
-    //         // // don't run Closure minification for WebGPU, see: https://github.com/emscripten-core/emscripten/issues/20415
-    //         // .release_use_closure = options.backend != .wgpu,
-    //     });
-    //     b.getInstallStep().dependOn(&link_step.step);
-
-    //     // sokol.sha
-
-    //     const run = sokol.emRunStep(b, .{ .name = "fluid", .emsdk = emsdk });
-    //     run.addArg("--no_browser"); // comment this line if you want it to focus on web browser after build
-    //     run.step.dependOn(&link_step.step);
-    //     b.step("run", "Run fluid web").dependOn(&run.step);
-    // }
+    for (steps[1..], 0..) |step, i|
+    {
+        step.dependOn(steps[i]);
+    }
+    b.default_step.dependOn(steps[steps.len - 1]);
+}
 
 
 
-    // const exe_check = b.addExecutable(.{
-    //     .name = "fluid",
-    //     .root_source_file = b.path("src/main.zig"),
-    // });
+// const exe_check = b.addExecutable(.{
+//     .name = "fluid",
+//     .root_source_file = b.path("src/main.zig"),
+// });
 
-    // const check = b.step("check", "Check if fluid compiles");
-    // check.dependOn(&exe_check.step);
-
-
-
-// fn buildShaders (b: *std.Build) !?*std.Build.Step.Run
-// {
-//     // if (!example.has_shader)
-//     //     return null;
-
-//     const shaders_dir = "src/shaders/";
-//     const input_path = b.fmt("{s}{s}.glsl", .{ shaders_dir, "fluid" });
-//     const output_path = b.fmt("{s}{s}.glsl.zig", .{ shaders_dir, "fluid" });
-//     return try shdc.compile(b, .{
-//         .dep_shdc = b.dependency("shdc", .{}),
-//         .input = b.path(input_path),
-//         .output = b.path(output_path),
-//         .slang = .{
-//             // .glsl430 = example.needs_compute,
-//             // .glsl410 = !example.needs_compute,
-//             // .glsl310es = example.needs_compute,
-//             .glsl300es = true,
-//             .metal_macos = true,
-//             // .hlsl5 = true,
-//             // .wgsl = true,
-//         },
-//         .reflection = true,
-//     });
-// }
+// const check = b.step("check", "Check if fluid compiles");
+// check.dependOn(&exe_check.step);

@@ -41,7 +41,7 @@ pub const GraphicsAPI = enum
 };
 
 pub const platform = PickPlatform();
-pub const graphicsAPI = PickGraphicsAPI();
+pub const graphics_api = PickGraphicsAPI();
 
 fn PickPlatform () RuntimePlatform
 {

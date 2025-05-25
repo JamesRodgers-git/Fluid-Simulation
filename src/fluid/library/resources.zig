@@ -3,8 +3,8 @@ const app = @import("app");
 const debug = @import("debug");
 const files = @import("files");
 
-extern fn createLibraryFromData_metal (data: [*]const u8, length: usize) i32;
-extern fn createPipelineVertFrag_metal (library_idx: i32) i32;
+extern fn createLibraryFromData_metal (data: [*]const u8, length: usize) usize;
+extern fn createPipelineVertFrag_metal (library_idx: usize) usize;
 
 pub fn loadMetalResources () void
 {
@@ -13,7 +13,7 @@ pub fn loadMetalResources () void
 
 fn loadMetalShader (shaderName: []const u8) void
 {
-    if (comptime app.graphicsAPI == .metal)
+    if (comptime app.graphics_api == .metal)
     {
         // debug.startTimer();
         const allocator = std.heap.page_allocator;
