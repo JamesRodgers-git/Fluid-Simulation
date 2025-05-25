@@ -1,6 +1,5 @@
 const std = @import("std");
-// const sokol = @import("sokol");
-// const shdc = @import("shdc");
+const Build = std.Build;
 
 /// Command to run debug
 //~ zig build run
@@ -19,7 +18,7 @@ const std = @import("std");
 // --release=small --release=safe  wasm32-freestanding wasm32-wasi wasm32-emscripten
 // --verbose
 
-pub fn build (b: *std.Build) !void
+pub fn build (b: *Build) !void
 {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -44,7 +43,7 @@ pub fn build (b: *std.Build) !void
     }
     else if (target.result.os.tag == .macos)
     {
-        try std.fs.cwd().makePath("zig-out/lib/");
+        // try std.fs.cwd().makePath("zig-out/lib/");
 
         const exe = b.addExecutable(.{
             .name = "fluid",
@@ -60,6 +59,7 @@ pub fn build (b: *std.Build) !void
         });
         // exe.entry = .{ .symbol_name = "init" };
         // exe.entry = .disabled;
+        // exe.addArg("-mmacos-version-min=11.0"); // sets minimum macos version
 
         // const exe_lib = b.addStaticLibrary(.{
         //     .name = "fluid",
@@ -69,68 +69,16 @@ pub fn build (b: *std.Build) !void
         // });
         // exe_lib.entry = .disabled;
 
-        const cmd_metalir = b.addSystemCommand(&.{
-            "xcrun", "-sdk", "macosx", "metal",
-            "-o", "zig-out/bin/shader.ir",
-            "-c", "src/fluid/shaders/shader.metal",
-        });
-
-        const cmd_metallib = b.addSystemCommand(&.{
-            "xcrun", "-sdk", "macosx", "metallib",
-            "-o", "zig-out/bin/shader.metallib",
-            "zig-out/bin/shader.ir",
-        });
-        // cmd_metallib.addCheck(.{ .expect_term = .{ .Exited = 0 } });
-        // cmd_metallib.has_side_effects = true;
-
-        // const cmd_objc = b.addSystemCommand(&.{
-        //     "clang",
-        //     // "-O3",
-        //     "-o", "zig-out/lib/cocoa_osx.o",
-        //     "-c", "src/engine/darwin/cocoa_osx.mm",
-        // });
-
-        const cmd_swift = b.addSystemCommand(&.{
-            "xcrun", "swiftc",
-            "-emit-object",
-            // "-emit-library", // this one also exports _main and use linker magic
-            "-static", // does it work?
-            "-parse-as-library", // removes _main
-
-            "-I", "src/engine/darwin/",
-            "-o", "zig-out/lib/cocoa_osx.o",
-
-            // sources:
-            "src/engine/darwin/cocoa_osx.swift",
-
-            if (optimize == .Debug) "-Onone" else "-O",
-
-            // for the future
-            // "-target-cpu"
-            // "-target",
-            // b.fmt("{s}-apple-macosx{}", .{
-            //     @tagName(target.result.cpu.arch),
-            //     target.result.os.version_range.semver.min,
-            // }),
-        });
-        if (optimize == .Debug) cmd_swift.addArgs(&.{ "-D", "DEBUG" });
-        // exe.addArg("-mmacos-version-min=11.0"); // sets minimum macos version
-
-        const install_exe = b.addInstallArtifact(exe, .{});
-
-        addLibrariesOSX(b, target, exe);
         addCommonImports(b, exe.root_module);
-        exe.addObjectFile(b.path("zig-out/lib/cocoa_osx.o"));
+        addLibrariesOSX(b, target, exe);
 
-        sequence(b, &.{
-            &cmd_metalir.step,
-            &cmd_metallib.step,
-        });
+        const metal = addCompileMetal(b);
 
-        sequence(b, &.{
-            &cmd_swift.step,
-            &install_exe.step,
-        });
+        compileSwift(b, optimize, exe);
+        const installexe = b.addInstallArtifact(exe, .{});
+
+        b.default_step.dependOn(&installexe.step);
+        b.default_step.dependOn(&metal.step);
 
         const run = b.addRunArtifact(exe);
         run.step.dependOn(b.getInstallStep());
@@ -138,7 +86,7 @@ pub fn build (b: *std.Build) !void
     }
 }
 
-fn addCommonImports (b: *std.Build, root_module: *std.Build.Module) void
+fn addCommonImports (b: *Build, root_module: *Build.Module) void
 {
     const app = b.createModule(.{ .root_source_file = b.path("src/engine/application.zig") });
     const native = b.createModule(.{ .root_source_file = b.path("src/engine/native.zig") });
@@ -164,7 +112,76 @@ fn addCommonImports (b: *std.Build, root_module: *std.Build.Module) void
     // module.addAnonymousImport("utils", "src/utils.zig");
 }
 
-fn addLibrariesOSX (b: *std.Build, target: std.Build.ResolvedTarget, exe: *std.Build.Step.Compile) void
+fn addCompileMetal (b: *Build) *Build.Step.Run
+{
+    const metalir = b.addSystemCommand(&.{
+        "xcrun", "-sdk", "macosx", "metal",
+    });
+    metalir.addArg("-c");
+    metalir.addFileArg(b.path("src/fluid/shaders/shader.metal"));
+    const output_ir = metalir.addPrefixedOutputFileArg("-o", "shader.ir");
+
+    const metallib = b.addSystemCommand(&.{
+        "xcrun", "-sdk", "macosx", "metallib",
+        "-o", "zig-out/bin/shader.metallib",
+    });
+    metallib.addFileArg(output_ir);
+    // metallib.addFileInput()
+
+    // metallib.addCheck(.{ .expect_term = .{ .Exited = 0 } }); // no idea what it is
+    // metallib.has_side_effects = true; // forces to rebuild every time
+
+    return metallib;
+}
+
+fn compileSwift (b: *Build, optimize: std.builtin.OptimizeMode, exe: *Build.Step.Compile) void
+{
+    // const objc = b.addSystemCommand(&.{
+    //     "clang",
+    //     // "-O3",
+    //     "-o", "zig-out/lib/cocoa_osx.o",
+    //     "-c", "src/engine/darwin/cocoa_osx.mm",
+    // });
+
+    const swift = b.addSystemCommand(&.{
+        "xcrun", "swiftc",
+        "-emit-object",
+        // "-emit-library", // this one also exports _main and use linker magic
+        "-static", // does it work?
+        "-parse-as-library", // removes _main
+        "-I", "src/engine/darwin/",
+
+        // enables useful compilation warnings
+        // -warn-swift3-objc-inference-complete
+        // -warn-concurrency -enable-actor-data-race-checks
+
+        // to test if code compiles for older os versions
+        // "-target", "arm64-apple-macos11.0",
+
+        // for the future
+        // "-target-cpu"
+        // "-target",
+        // b.fmt("{s}-apple-macosx{}", .{
+        //     @tagName(target.result.cpu.arch),
+        //     target.result.os.version_range.semver.min,
+        // }),
+
+        // "-sanitize=address",
+
+        if (optimize == .Debug) "-Onone" else "-O",
+    });
+    if (optimize == .Debug) swift.addArgs(&.{ "-D", "DEBUG", "-g" });
+
+    // zig automatically detects if file has been changed to run swift step
+    swift.addFileArg(b.path("src/engine/darwin/cocoa_osx.swift"));
+
+    // this add dependency to exe step
+    exe.addObjectFile(swift.addPrefixedOutputFileArg("-o", "cocoa_osx.o"));
+}
+
+// TODO it is a better idea to auto add dependencies after swift step
+// if of course Apple have made it easy
+fn addLibrariesOSX (b: *Build, target: Build.ResolvedTarget, exe: *Build.Step.Compile) void
 {
     //~ xcrun --show-sdk-path
     const sdk = std.zig.system.darwin.getSdk(b.allocator, target.result).?;
@@ -186,7 +203,6 @@ fn addLibrariesOSX (b: *std.Build, target: std.Build.ResolvedTarget, exe: *std.B
     exe.linkFramework("Cocoa");
     exe.linkFramework("Metal");
     exe.linkFramework("QuartzCore");
-    // exe.linkFramework("CoreGraphics");
 
     // force static linking, can be useful in a future
     // exe.addObjectFile(.{ .cwd_relative = b.fmt("{s}/usr/lib/swift_static/macosx/libswiftCore.a", .{sdk}) });
@@ -219,7 +235,7 @@ fn addLibrariesOSX (b: *std.Build, target: std.Build.ResolvedTarget, exe: *std.B
     exe.linkSystemLibrary("swiftUniformTypeIdentifiers");
 }
 
-fn importModulesToEachOtherAndToRoot (root_module: *std.Build.Module, modules: []const struct { name: []const u8, module: *std.Build.Module }) void
+fn importModulesToEachOtherAndToRoot (root_module: *Build.Module, modules: []const struct { name: []const u8, module: *Build.Module }) void
 {
     for (modules) |group|
     {
@@ -234,21 +250,22 @@ fn importModulesToEachOtherAndToRoot (root_module: *std.Build.Module, modules: [
         root_module.addImport(tuple.name, tuple.module);
 }
 
-fn sequence (b: *std.Build, steps: []const *std.Build.Step) void
-{
-    if (steps.len == 0) return;
-    if (steps.len == 1)
-    {
-        b.default_step.dependOn(steps[0]);
-        return;
-    }
+// // TODO do I really need this?
+// fn sequence (b: *Build, steps: []const *Build.Step) void
+// {
+//     if (steps.len == 0) return;
+//     if (steps.len == 1)
+//     {
+//         b.default_step.dependOn(steps[0]);
+//         return;
+//     }
 
-    for (steps[1..], 0..) |step, i|
-    {
-        step.dependOn(steps[i]);
-    }
-    b.default_step.dependOn(steps[steps.len - 1]);
-}
+//     for (steps[1..], 0..) |step, i|
+//     {
+//         step.dependOn(steps[i]);
+//     }
+//     b.default_step.dependOn(steps[steps.len - 1]);
+// }
 
 
 

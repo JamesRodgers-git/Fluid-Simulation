@@ -115,11 +115,17 @@ class MetalView
         layer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
         layer.isOpaque = true
         layer.framebufferOnly = true
-        
+
         window.contentView?.wantsLayer = true
         window.contentView?.layer = layer
 
         caDisplayLink = window.screen?.displayLink(target: self, selector: #selector(displayLinkUpdate))
+    }
+
+    deinit
+    {
+        guard let caDisplayLink = caDisplayLink else { return }
+        caDisplayLink.invalidate();
     }
 
     public func startDisplayLink ()
@@ -136,7 +142,8 @@ class MetalView
 
     func displayLinkUpdateLoop ()
     {
-        let needRedraw = resize()
+        // let needRedraw = resize()
+        let _ = resize()
         // update()
         autoreleasepool
         {
@@ -165,7 +172,7 @@ class MetalView
     func resize () -> Bool
     {
         let newSize = window.frame.size
-        
+
         if Int(newSize.width) == Int(frameSize.width) && Int(newSize.height) == Int(frameSize.height)
         {
             return false
@@ -221,7 +228,7 @@ class Window: NSObject, NSWindowDelegate
         nswindow.center()
         nswindow.delegate = self
     }
- 
+
     func windowShouldClose (_ sender: NSWindow) -> Bool
     {
         return true
