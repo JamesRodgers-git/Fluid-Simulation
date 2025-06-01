@@ -233,6 +233,8 @@ fn addLibrariesOSX (b: *Build, target: Build.ResolvedTarget, exe: *Build.Step.Co
     exe.linkSystemLibrary("swiftCoreImage");
     exe.linkSystemLibrary("swiftDarwin");
     exe.linkSystemLibrary("swiftUniformTypeIdentifiers");
+    exe.linkSystemLibrary("swiftDataDetection");
+    exe.linkSystemLibrary("swiftOSLog");
 }
 
 fn importModulesToEachOtherAndToRoot (root_module: *Build.Module, modules: []const struct { name: []const u8, module: *Build.Module }) void
