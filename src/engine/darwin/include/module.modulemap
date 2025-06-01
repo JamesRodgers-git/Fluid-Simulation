@@ -1,3 +1,7 @@
 module Bridge {
-    header "bridge.h"
+    header "Bridge.h"
+}
+
+module Graphics {
+    header "Graphics.h"
 }

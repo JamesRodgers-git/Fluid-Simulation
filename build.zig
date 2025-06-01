@@ -1,6 +1,8 @@
 const std = @import("std");
 const Build = std.Build;
 
+// TODO move hardcore parts to a separate /src/build.zig
+
 /// Command to run debug
 //~ zig build run
 
@@ -17,6 +19,19 @@ const Build = std.Build;
 /// Just left over for the future
 // --release=small --release=safe  wasm32-freestanding wasm32-wasi wasm32-emscripten
 // --verbose
+
+const engine = [_]NameAndModulePath {
+    .{ .name = "app", .path = "src/engine/application.zig" },
+    .{ .name = "native", .path = "src/engine/native.zig" },
+    .{ .name = "debug", .path = "src/engine/debug.zig" },
+    .{ .name = "files", .path = "src/engine/files.zig" },
+    .{ .name = "math", .path = "src/engine/math.zig" },
+    .{ .name = "graphics", .path = "src/engine/graphics.zig" },
+};
+
+const fluid = [_]NameAndModulePath {
+    .{ .name = "materials", .path = "src/fluid/materials.zig" },
+};
 
 pub fn build (b: *Build) !void
 {
@@ -38,7 +53,7 @@ pub fn build (b: *Build) !void
 
         // exe.root_module.export_symbol_names
 
-        addCommonImports(b, exe.root_module);
+        addImports(b, exe.root_module, &engine ++ &fluid);
         b.installArtifact(exe);
     }
     else if (target.result.os.tag == .macos)
@@ -69,8 +84,13 @@ pub fn build (b: *Build) !void
         // });
         // exe_lib.entry = .disabled;
 
-        addCommonImports(b, exe.root_module);
+        // addCommonImports(b, exe.root_module);
+        addImports(b, exe.root_module, &engine ++ &fluid); // TODO why do I need dereference here?
         addLibrariesOSX(b, target, exe);
+
+        // TODO come back to it when new Zig version will release
+        // _ = exe.getEmittedH();
+        // exe.addCSourceFile(.{});
 
         const metal = addCompileMetal(b);
 
@@ -86,31 +106,27 @@ pub fn build (b: *Build) !void
     }
 }
 
-fn addCommonImports (b: *Build, root_module: *Build.Module) void
-{
-    const app = b.createModule(.{ .root_source_file = b.path("src/engine/application.zig") });
-    const native = b.createModule(.{ .root_source_file = b.path("src/engine/native.zig") });
-        // native.addImport("app", app);
-    const debug = b.createModule(.{ .root_source_file = b.path("src/engine/debug.zig") });
-        // debug.addImport("app", app);
-    const files = b.createModule(.{ .root_source_file = b.path("src/engine/files.zig") });
-        // files.addImport("app", app);
-        // files.addImport("debug", debug);
+// TODO remove
+// fn addCommonImports (b: *Build, root_module: *Build.Module) void
+// {
+//     const app = b.createModule(.{ .root_source_file = b.path("src/engine/application.zig") });
+//     const native = b.createModule(.{ .root_source_file = b.path("src/engine/native.zig") });
+//     const debug = b.createModule(.{ .root_source_file = b.path("src/engine/debug.zig") });
+//     const files = b.createModule(.{ .root_source_file = b.path("src/engine/files.zig") });
+//     const math = b.createModule(.{ .root_source_file = b.path("src/engine/math.zig") });
+//     const graphics = b.createModule(.{ .root_source_file = b.path("src/engine/graphics.zig") });
 
-    importModulesToEachOtherAndToRoot(root_module, &.{
-        .{ .name = "app", .module = app },
-        .{ .name = "native", .module = native },
-        .{ .name = "debug", .module = debug },
-        .{ .name = "files", .module = files },
-    });
+//     importModulesToEachOtherAndToRoot(root_module, &.{
+//         .{ .name = "app", .module = app },
+//         .{ .name = "native", .module = native },
+//         .{ .name = "debug", .module = debug },
+//         .{ .name = "files", .module = files },
+//         .{ .name = "math", .module = math },
+//         .{ .name = "graphics", .module = graphics },
+//     });
 
-    // root_module.addImport("app", app);
-    // root_module.addImport("native", native);
-    // root_module.addImport("debug", debug);
-    // root_module.addImport("files", files);
-
-    // module.addAnonymousImport("utils", "src/utils.zig");
-}
+//     // module.addAnonymousImport("utils", "src/utils.zig");
+// }
 
 fn addCompileMetal (b: *Build) *Build.Step.Run
 {
@@ -149,7 +165,8 @@ fn compileSwift (b: *Build, optimize: std.builtin.OptimizeMode, exe: *Build.Step
         // "-emit-library", // this one also exports _main and use linker magic
         "-static", // does it work?
         "-parse-as-library", // removes _main
-        "-I", "src/engine/darwin/",
+        "-whole-module-optimization",
+        // "-I", "src/engine/darwin/",
 
         // enables useful compilation warnings
         // -warn-swift3-objc-inference-complete
@@ -172,10 +189,15 @@ fn compileSwift (b: *Build, optimize: std.builtin.OptimizeMode, exe: *Build.Step
     });
     if (optimize == .Debug) swift.addArgs(&.{ "-D", "DEBUG", "-g" });
 
+    // swift.addArg("-I");
+    // swift.addDirectoryArg(b.path("src/engine/darwin/"));
+    swift.addPrefixedDirectoryArg("-I", b.path("src/engine/darwin/"));
+
     // zig automatically detects if file has been changed to run swift step
     swift.addFileArg(b.path("src/engine/darwin/cocoa_osx.swift"));
+    swift.addFileArg(b.path("src/engine/darwin/metal.swift"));
 
-    // this add dependency to exe step
+    // this adds dependency to exe step
     exe.addObjectFile(swift.addPrefixedOutputFileArg("-o", "cocoa_osx.o"));
 }
 
@@ -235,7 +257,34 @@ fn addLibrariesOSX (b: *Build, target: Build.ResolvedTarget, exe: *Build.Step.Co
     exe.linkSystemLibrary("swiftUniformTypeIdentifiers");
 }
 
-fn importModulesToEachOtherAndToRoot (root_module: *Build.Module, modules: []const struct { name: []const u8, module: *Build.Module }) void
+const NameAndModulePath = struct
+{
+    name: []const u8,
+    path: []const u8,
+};
+
+const NameAndModule = struct
+{
+    name: []const u8,
+    module: *Build.Module,
+};
+
+fn addImports (b: *Build, root_module: *Build.Module, comptime modules_desc: []const NameAndModulePath) void
+{
+    var modules: [modules_desc.len]NameAndModule = undefined;
+
+    for (modules_desc, 0..) |desc, i|
+    {
+        modules[i] = .{
+            .name = desc.name,
+            .module = b.createModule(.{ .root_source_file = b.path(desc.path) }),
+        };
+    }
+
+    importModulesToEachOtherAndToRoot(root_module, &modules);
+}
+
+fn importModulesToEachOtherAndToRoot (root_module: *Build.Module, modules: []const NameAndModule) void
 {
     for (modules) |group|
     {

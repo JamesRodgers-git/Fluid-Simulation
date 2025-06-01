@@ -14,7 +14,7 @@ pub fn init () !void
     }
 }
 
-pub fn loadFile (allocator: std.mem.Allocator, fileName: []const u8) !?[]u8
+pub fn loadFile (allocator: std.mem.Allocator, fileName: []const u8) !?[]const u8
 {
     // []const u8 is a string
     // [_] array with '_' size which is replaced for number 2

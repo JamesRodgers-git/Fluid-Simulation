@@ -23,7 +23,7 @@ export fn start () void
     // debug.log("Platform: {s}", .{ @tagName(app.platform) });
     // debug.log("Exe path: {s}", .{ files.exe_path });
 
-    resources.loadMetalResources();
+    resources.load();
 
     // wasm build size grows quickly with every log
     // debug.log("hi", .{});

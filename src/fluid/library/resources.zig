@@ -2,29 +2,30 @@ const std = @import("std");
 const app = @import("app");
 const debug = @import("debug");
 const files = @import("files");
+const graphics = @import("graphics");
+const materials = @import("materials");
 
-extern fn createLibraryFromData_metal (data: [*]const u8, length: usize) usize;
-extern fn createPipelineVertFrag_metal (library_idx: usize) usize;
-
-pub fn loadMetalResources () void
-{
-    loadMetalShader("shader.metallib");
-}
-
-fn loadMetalShader (shaderName: []const u8) void
+// TODO async file loading
+// TODO arena allocator
+// TODO fast stack allocator for small files
+pub fn load () void
 {
     if (comptime app.graphics_api == .metal)
     {
-        // debug.startTimer();
-        const allocator = std.heap.page_allocator;
-        const buffer = files.loadFile(allocator, shaderName) catch unreachable;
-        // debug.printTimer();
+        loadShaderFile("shader.metallib", materials.fluid_group);
+    }
+}
 
-        if (buffer) |value|
-        {
-            defer allocator.free(value);
-            const library_idx = createLibraryFromData_metal(value.ptr, value.len);
-            _ = createPipelineVertFrag_metal(library_idx);
-        }
+fn loadShaderFile (shaderName: []const u8, library_group: usize) void
+{
+    // debug.startTimer();
+    const allocator = std.heap.page_allocator;
+    const buffer = files.loadFile(allocator, shaderName) catch unreachable;
+    // debug.printTimer();
+
+    if (buffer) |buf|
+    {
+        defer allocator.free(buf);
+        graphics.createLibrary(buf, library_group);
     }
 }

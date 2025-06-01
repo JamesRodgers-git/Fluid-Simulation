@@ -1,5 +1,6 @@
 import Foundation
 import Cocoa
+import Metal
 import Bridge
 
 func enableMetalValidation ()
@@ -21,9 +22,6 @@ var metal: MetalView?
 // public typealias VoidFunction = @convention(c) () -> Void
 // var initFnPtr: VoidFunction?
 
-var _mtLibraries: [MTLLibrary] = []
-var _mtPipelines: [MTLRenderPipelineState] = []
-
 // main()
 // func main ()
 // {
@@ -35,6 +33,8 @@ public func start_osx ()//(_ initFn: VoidFunction)
 {
     enableMetalValidation()
 
+    // print(TEST)
+
     // initFnPtr = initFn
 
     let app = NSApplication.shared
@@ -45,50 +45,6 @@ public func start_osx ()//(_ initFn: VoidFunction)
     metal = MetalView(window!.nswindow)
 
     app.run()
-}
-
-@_cdecl("createLibraryFromData_metal")
-public func createLibraryFromData_metal (data_ptr: UnsafeRawPointer, data_len: Int) -> Int
-{
-    let data = DispatchData(bytesNoCopy: UnsafeRawBufferPointer(start: data_ptr, count: data_len))//, deallocator: .custom(nil, nil))
-
-    do {
-        let library = try metal!.device.makeLibrary(data: data)
-        _mtLibraries.append(library)
-        return _mtLibraries.count - 1
-    }
-    catch
-    {
-        print(error)
-        return -1
-    }
-}
-
-@_cdecl("createPipelineVertFrag_metal")
-public func createPipelineVertFrag_metal (library_idx: Int) -> Int
-{
-    let library = _mtLibraries[library_idx]
-
-    let vertFunc = library.makeFunction(name: "vertexShader")!
-    let fragFunc = library.makeFunction(name: "fragmentShader")!
-
-    let desc = MTLRenderPipelineDescriptor()
-    desc.label = "Simple Pipeline"
-    desc.vertexFunction = vertFunc
-    desc.fragmentFunction = fragFunc
-    // desc.vertexDescriptor = nil
-    desc.colorAttachments[0].pixelFormat = .bgra8Unorm
-
-    do {
-        let pipeline = try metal!.device.makeRenderPipelineState(descriptor: desc)
-        _mtPipelines.append(pipeline)
-        return _mtPipelines.count - 1
-    }
-    catch
-    {
-        print(error)
-        return -1
-    }
 }
 
 // @available(macOS 14.0, *)
