@@ -26,11 +26,6 @@ pub fn createLibrary (data: []const u8, library_group: usize) void
     }
 }
 
-// pub fn setFunctionKeywords (name: []const u8, library_group: usize, const[] const[] u8 keywords) void
-// {
-
-// }
-
 pub fn blit () void
 {
     // switch (comptime app.graphicsAPI)
@@ -44,7 +39,7 @@ pub fn blit () void
 // TODO union with platform's implementation of Material
 pub const Material = struct
 {
-    // metal.Material   
+    // metal.Material
 };
 
 pub const RenderTarget = struct

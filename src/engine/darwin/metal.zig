@@ -16,6 +16,14 @@ pub const Material = struct
     pipeline: *Pipelines, // only invoked when keywords or blending changes, so no cache misses most of the time
 
     // uniforms
+
+    // pub fn setVertKeywords (self: Material, const[] const[] u8 keywords) void
+    // {
+    // }
+
+    // pub fn setFragKeywords (self: Material, const[] const[] u8 keywords) void
+    // {
+    // }
 };
 
 const Metal = struct
