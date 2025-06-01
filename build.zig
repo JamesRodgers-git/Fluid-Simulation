@@ -255,6 +255,8 @@ fn addLibrariesOSX (b: *Build, target: Build.ResolvedTarget, exe: *Build.Step.Co
     exe.linkSystemLibrary("swiftCoreImage");
     exe.linkSystemLibrary("swiftDarwin");
     exe.linkSystemLibrary("swiftUniformTypeIdentifiers");
+    exe.linkSystemLibrary("swiftDataDetection");
+    exe.linkSystemLibrary("swiftOSLog");
 }
 
 const NameAndModulePath = struct
